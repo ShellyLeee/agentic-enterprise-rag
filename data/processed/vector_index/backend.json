@@ -1,0 +1,7 @@
+{
+  "backend": "numpy",
+  "embedding_model": "BAAI/bge-small-en-v1.5 (hashing fallback)",
+  "embedding_backend": "hashing-fallback",
+  "chunk_count": 5,
+  "dimension": 384
+}

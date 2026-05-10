@@ -1,0 +1,429 @@
+{
+  "trace_id": "d30752b4-99eb-4ccc-9a0d-ef2b774e4deb",
+  "started_at": "2026-05-09T13:07:07.372534+00:00",
+  "original_question": "What is the company's policy on pet insurance?",
+  "query_type": "ood_or_unanswerable",
+  "plan": {
+    "steps": [
+      "retrieve",
+      "rerank",
+      "policy_decision",
+      "answer_or_rewrite_or_refuse",
+      "trace"
+    ],
+    "rationale": "Question classified as ood_or_unanswerable; use evidence thresholds before answering."
+  },
+  "tool_calls": [
+    {
+      "tool": "RetrievalTool",
+      "output": {
+        "query": "What is the company's policy on pet insurance?",
+        "retrieved_chunks": [
+          {
+            "chunk_id": "5d842118f3e6ce1f6bc8310a48bc97345f66ea85",
+            "text": "Air travel should be booked in economy class unless a written exception is approved by an\nexecutive. Meals during business travel are reimbursable up to the daily limit published by the\nfinance team. Alcohol is not reimbursable unless explicitly approved for a client event.\n\n## Security and Data Handling\n\nEmployees must protect company, customer, and employee data according to its classification.\nConfidential data may be stored only in approved systems and must not be copied to personal\ndevices, personal email accounts, or unapproved cloud services.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Expense Reimbursement",
+              "chunk_id": "5d842118f3e6ce1f6bc8310a48bc97345f66ea85",
+              "chunk_index": 3
+            },
+            "score": 0.179787
+          },
+          {
+            "chunk_id": "de1babd25a5b4c2e7cbc496c88761f634753d92f",
+            "text": "Teams handling regulated customer data may require additional controls, including approved\ndevices, private workspaces, and mandatory VPN connectivity. Managers may adjust remote work\narrangements during audits, incident response, or critical launch periods.\n\n## Expense Reimbursement\n\nBusiness expenses must be reasonable, documented, and submitted within 30 days of purchase.\nEmployees should attach itemized receipts for travel, meals, software subscriptions, and client\nmeeting costs. Expenses submitted after 30 days require finance approval.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Remote Work Policy",
+              "chunk_id": "de1babd25a5b4c2e7cbc496c88761f634753d92f",
+              "chunk_index": 2
+            },
+            "score": 0.146426
+          },
+          {
+            "chunk_id": "58f0057bb161da4313cb76b14b5afbca96c3a459",
+            "text": "Vacation requests should be submitted to the employee's manager at least two weeks before the\nplanned absence. Managers approve requests based on business coverage, project deadlines, and\nteam availability. Unused vacation may carry over for one calendar year, up to a maximum of\nfive days.\n\n## Remote Work Policy\n\nEmployees may work remotely up to three days per week when their role, team commitments, and\nmanager approval allow it. Remote employees must remain reachable during core collaboration\nhours from 10:00 a.m. to 3:00 p.m. in their assigned office time zone.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Vacation Policy",
+              "chunk_id": "58f0057bb161da4313cb76b14b5afbca96c3a459",
+              "chunk_index": 1
+            },
+            "score": 0.142784
+          },
+          {
+            "chunk_id": "fcd9abd0998f6bce3542dba710a695c7b369b29c",
+            "text": "Suspected security incidents, lost devices, accidental data sharing, or unauthorized access must\nbe reported to the security team immediately. Employees must complete annual security training\nand follow additional handling requirements for regulated, financial, or personally identifiable\ninformation.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Security and Data Handling",
+              "chunk_id": "fcd9abd0998f6bce3542dba710a695c7b369b29c",
+              "chunk_index": 4
+            },
+            "score": 0.125988
+          },
+          {
+            "chunk_id": "60968f54683d46dc7ef1fe979aacceaea1427b63",
+            "text": "# Enterprise Employee Policy Handbook\n\n## Vacation Policy\n\nFull-time employees accrue paid vacation time based on tenure and employment status. New\nemployees accrue 15 vacation days per calendar year, prorated from their start date. Employees\nwith more than five years of service accrue 20 vacation days per calendar year.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Vacation Policy",
+              "chunk_id": "60968f54683d46dc7ef1fe979aacceaea1427b63",
+              "chunk_index": 0
+            },
+            "score": 0.079446
+          }
+        ],
+        "backend": "numpy",
+        "embedding_model": "BAAI/bge-small-en-v1.5",
+        "index_dir": "data/processed/vector_index"
+      },
+      "timestamp": "2026-05-09T13:07:08.677380+00:00"
+    },
+    {
+      "tool": "RerankTool",
+      "output": {
+        "query": "What is the company's policy on pet insurance?",
+        "reranked_chunks": [
+          {
+            "chunk_id": "60968f54683d46dc7ef1fe979aacceaea1427b63",
+            "text": "# Enterprise Employee Policy Handbook\n\n## Vacation Policy\n\nFull-time employees accrue paid vacation time based on tenure and employment status. New\nemployees accrue 15 vacation days per calendar year, prorated from their start date. Employees\nwith more than five years of service accrue 20 vacation days per calendar year.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Vacation Policy",
+              "chunk_id": "60968f54683d46dc7ef1fe979aacceaea1427b63",
+              "chunk_index": 0
+            },
+            "score": 0.079446,
+            "retrieval_score": 0.079446,
+            "rerank_score": 0.091287
+          },
+          {
+            "chunk_id": "5d842118f3e6ce1f6bc8310a48bc97345f66ea85",
+            "text": "Air travel should be booked in economy class unless a written exception is approved by an\nexecutive. Meals during business travel are reimbursable up to the daily limit published by the\nfinance team. Alcohol is not reimbursable unless explicitly approved for a client event.\n\n## Security and Data Handling\n\nEmployees must protect company, customer, and employee data according to its classification.\nConfidential data may be stored only in approved systems and must not be copied to personal\ndevices, personal email accounts, or unapproved cloud services.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Expense Reimbursement",
+              "chunk_id": "5d842118f3e6ce1f6bc8310a48bc97345f66ea85",
+              "chunk_index": 3
+            },
+            "score": 0.179787,
+            "retrieval_score": 0.179787,
+            "rerank_score": 0.070014
+          },
+          {
+            "chunk_id": "58f0057bb161da4313cb76b14b5afbca96c3a459",
+            "text": "Vacation requests should be submitted to the employee's manager at least two weeks before the\nplanned absence. Managers approve requests based on business coverage, project deadlines, and\nteam availability. Unused vacation may carry over for one calendar year, up to a maximum of\nfive days.\n\n## Remote Work Policy\n\nEmployees may work remotely up to three days per week when their role, team commitments, and\nmanager approval allow it. Remote employees must remain reachable during core collaboration\nhours from 10:00 a.m. to 3:00 p.m. in their assigned office time zone.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Vacation Policy",
+              "chunk_id": "58f0057bb161da4313cb76b14b5afbca96c3a459",
+              "chunk_index": 1
+            },
+            "score": 0.142784,
+            "retrieval_score": 0.142784,
+            "rerank_score": 0.066227
+          },
+          {
+            "chunk_id": "de1babd25a5b4c2e7cbc496c88761f634753d92f",
+            "text": "Teams handling regulated customer data may require additional controls, including approved\ndevices, private workspaces, and mandatory VPN connectivity. Managers may adjust remote work\narrangements during audits, incident response, or critical launch periods.\n\n## Expense Reimbursement\n\nBusiness expenses must be reasonable, documented, and submitted within 30 days of purchase.\nEmployees should attach itemized receipts for travel, meals, software subscriptions, and client\nmeeting costs. Expenses submitted after 30 days require finance approval.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Remote Work Policy",
+              "chunk_id": "de1babd25a5b4c2e7cbc496c88761f634753d92f",
+              "chunk_index": 2
+            },
+            "score": 0.146426,
+            "retrieval_score": 0.146426,
+            "rerank_score": 0.0
+          },
+          {
+            "chunk_id": "fcd9abd0998f6bce3542dba710a695c7b369b29c",
+            "text": "Suspected security incidents, lost devices, accidental data sharing, or unauthorized access must\nbe reported to the security team immediately. Employees must complete annual security training\nand follow additional handling requirements for regulated, financial, or personally identifiable\ninformation.",
+            "metadata": {
+              "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+              "source_path": "data/raw_docs/sample_policy.md",
+              "file_name": "sample_policy.md",
+              "file_type": "md",
+              "page_number": 1,
+              "section_title": "Security and Data Handling",
+              "chunk_id": "fcd9abd0998f6bce3542dba710a695c7b369b29c",
+              "chunk_index": 4
+            },
+            "score": 0.125988,
+            "retrieval_score": 0.125988,
+            "rerank_score": 0.0
+          }
+        ],
+        "reranker_backend": "lexical-overlap-fallback",
+        "reranker_model": "BAAI/bge-reranker-base"
+      },
+      "timestamp": "2026-05-09T13:07:08.677647+00:00"
+    },
+    {
+      "tool": "RefusalTool",
+      "output": {
+        "question": "What is the company's policy on pet insurance?",
+        "answer": "I don't have enough grounded evidence to answer this question from the available documents. Reason: Query appears out of scope and retrieved evidence is weak. Best available scores: [0.091287, 0.070014, 0.066227].",
+        "reason": "Query appears out of scope and retrieved evidence is weak.",
+        "best_scores": [
+          0.091287,
+          0.070014,
+          0.066227
+        ],
+        "citations": [],
+        "is_refusal": true
+      },
+      "timestamp": "2026-05-09T13:07:08.677674+00:00"
+    }
+  ],
+  "retrieval_results": [
+    {
+      "query": "What is the company's policy on pet insurance?",
+      "retrieved_chunks": [
+        {
+          "chunk_id": "5d842118f3e6ce1f6bc8310a48bc97345f66ea85",
+          "text": "Air travel should be booked in economy class unless a written exception is approved by an\nexecutive. Meals during business travel are reimbursable up to the daily limit published by the\nfinance team. Alcohol is not reimbursable unless explicitly approved for a client event.\n\n## Security and Data Handling\n\nEmployees must protect company, customer, and employee data according to its classification.\nConfidential data may be stored only in approved systems and must not be copied to personal\ndevices, personal email accounts, or unapproved cloud services.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Expense Reimbursement",
+            "chunk_id": "5d842118f3e6ce1f6bc8310a48bc97345f66ea85",
+            "chunk_index": 3
+          },
+          "score": 0.179787
+        },
+        {
+          "chunk_id": "de1babd25a5b4c2e7cbc496c88761f634753d92f",
+          "text": "Teams handling regulated customer data may require additional controls, including approved\ndevices, private workspaces, and mandatory VPN connectivity. Managers may adjust remote work\narrangements during audits, incident response, or critical launch periods.\n\n## Expense Reimbursement\n\nBusiness expenses must be reasonable, documented, and submitted within 30 days of purchase.\nEmployees should attach itemized receipts for travel, meals, software subscriptions, and client\nmeeting costs. Expenses submitted after 30 days require finance approval.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Remote Work Policy",
+            "chunk_id": "de1babd25a5b4c2e7cbc496c88761f634753d92f",
+            "chunk_index": 2
+          },
+          "score": 0.146426
+        },
+        {
+          "chunk_id": "58f0057bb161da4313cb76b14b5afbca96c3a459",
+          "text": "Vacation requests should be submitted to the employee's manager at least two weeks before the\nplanned absence. Managers approve requests based on business coverage, project deadlines, and\nteam availability. Unused vacation may carry over for one calendar year, up to a maximum of\nfive days.\n\n## Remote Work Policy\n\nEmployees may work remotely up to three days per week when their role, team commitments, and\nmanager approval allow it. Remote employees must remain reachable during core collaboration\nhours from 10:00 a.m. to 3:00 p.m. in their assigned office time zone.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Vacation Policy",
+            "chunk_id": "58f0057bb161da4313cb76b14b5afbca96c3a459",
+            "chunk_index": 1
+          },
+          "score": 0.142784
+        },
+        {
+          "chunk_id": "fcd9abd0998f6bce3542dba710a695c7b369b29c",
+          "text": "Suspected security incidents, lost devices, accidental data sharing, or unauthorized access must\nbe reported to the security team immediately. Employees must complete annual security training\nand follow additional handling requirements for regulated, financial, or personally identifiable\ninformation.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Security and Data Handling",
+            "chunk_id": "fcd9abd0998f6bce3542dba710a695c7b369b29c",
+            "chunk_index": 4
+          },
+          "score": 0.125988
+        },
+        {
+          "chunk_id": "60968f54683d46dc7ef1fe979aacceaea1427b63",
+          "text": "# Enterprise Employee Policy Handbook\n\n## Vacation Policy\n\nFull-time employees accrue paid vacation time based on tenure and employment status. New\nemployees accrue 15 vacation days per calendar year, prorated from their start date. Employees\nwith more than five years of service accrue 20 vacation days per calendar year.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Vacation Policy",
+            "chunk_id": "60968f54683d46dc7ef1fe979aacceaea1427b63",
+            "chunk_index": 0
+          },
+          "score": 0.079446
+        }
+      ],
+      "backend": "numpy",
+      "embedding_model": "BAAI/bge-small-en-v1.5",
+      "index_dir": "data/processed/vector_index"
+    }
+  ],
+  "rerank_results": [
+    {
+      "query": "What is the company's policy on pet insurance?",
+      "reranked_chunks": [
+        {
+          "chunk_id": "60968f54683d46dc7ef1fe979aacceaea1427b63",
+          "text": "# Enterprise Employee Policy Handbook\n\n## Vacation Policy\n\nFull-time employees accrue paid vacation time based on tenure and employment status. New\nemployees accrue 15 vacation days per calendar year, prorated from their start date. Employees\nwith more than five years of service accrue 20 vacation days per calendar year.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Vacation Policy",
+            "chunk_id": "60968f54683d46dc7ef1fe979aacceaea1427b63",
+            "chunk_index": 0
+          },
+          "score": 0.079446,
+          "retrieval_score": 0.079446,
+          "rerank_score": 0.091287
+        },
+        {
+          "chunk_id": "5d842118f3e6ce1f6bc8310a48bc97345f66ea85",
+          "text": "Air travel should be booked in economy class unless a written exception is approved by an\nexecutive. Meals during business travel are reimbursable up to the daily limit published by the\nfinance team. Alcohol is not reimbursable unless explicitly approved for a client event.\n\n## Security and Data Handling\n\nEmployees must protect company, customer, and employee data according to its classification.\nConfidential data may be stored only in approved systems and must not be copied to personal\ndevices, personal email accounts, or unapproved cloud services.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Expense Reimbursement",
+            "chunk_id": "5d842118f3e6ce1f6bc8310a48bc97345f66ea85",
+            "chunk_index": 3
+          },
+          "score": 0.179787,
+          "retrieval_score": 0.179787,
+          "rerank_score": 0.070014
+        },
+        {
+          "chunk_id": "58f0057bb161da4313cb76b14b5afbca96c3a459",
+          "text": "Vacation requests should be submitted to the employee's manager at least two weeks before the\nplanned absence. Managers approve requests based on business coverage, project deadlines, and\nteam availability. Unused vacation may carry over for one calendar year, up to a maximum of\nfive days.\n\n## Remote Work Policy\n\nEmployees may work remotely up to three days per week when their role, team commitments, and\nmanager approval allow it. Remote employees must remain reachable during core collaboration\nhours from 10:00 a.m. to 3:00 p.m. in their assigned office time zone.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Vacation Policy",
+            "chunk_id": "58f0057bb161da4313cb76b14b5afbca96c3a459",
+            "chunk_index": 1
+          },
+          "score": 0.142784,
+          "retrieval_score": 0.142784,
+          "rerank_score": 0.066227
+        },
+        {
+          "chunk_id": "de1babd25a5b4c2e7cbc496c88761f634753d92f",
+          "text": "Teams handling regulated customer data may require additional controls, including approved\ndevices, private workspaces, and mandatory VPN connectivity. Managers may adjust remote work\narrangements during audits, incident response, or critical launch periods.\n\n## Expense Reimbursement\n\nBusiness expenses must be reasonable, documented, and submitted within 30 days of purchase.\nEmployees should attach itemized receipts for travel, meals, software subscriptions, and client\nmeeting costs. Expenses submitted after 30 days require finance approval.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Remote Work Policy",
+            "chunk_id": "de1babd25a5b4c2e7cbc496c88761f634753d92f",
+            "chunk_index": 2
+          },
+          "score": 0.146426,
+          "retrieval_score": 0.146426,
+          "rerank_score": 0.0
+        },
+        {
+          "chunk_id": "fcd9abd0998f6bce3542dba710a695c7b369b29c",
+          "text": "Suspected security incidents, lost devices, accidental data sharing, or unauthorized access must\nbe reported to the security team immediately. Employees must complete annual security training\nand follow additional handling requirements for regulated, financial, or personally identifiable\ninformation.",
+          "metadata": {
+            "document_id": "f18ffc6d77cb2f3c3f438ba99ae6d2e603fa9db3",
+            "source_path": "data/raw_docs/sample_policy.md",
+            "file_name": "sample_policy.md",
+            "file_type": "md",
+            "page_number": 1,
+            "section_title": "Security and Data Handling",
+            "chunk_id": "fcd9abd0998f6bce3542dba710a695c7b369b29c",
+            "chunk_index": 4
+          },
+          "score": 0.125988,
+          "retrieval_score": 0.125988,
+          "rerank_score": 0.0
+        }
+      ],
+      "reranker_backend": "lexical-overlap-fallback",
+      "reranker_model": "BAAI/bge-reranker-base"
+    }
+  ],
+  "evidence_statistics": [
+    {
+      "decision": "refuse",
+      "reason": "Query appears out of scope and retrieved evidence is weak.",
+      "retry_count": 0,
+      "top_rerank_score": 0.091287,
+      "supporting_chunks": 0,
+      "threshold": 0.5,
+      "scores": [
+        0.091287,
+        0.070014,
+        0.066227,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "rewritten_query": null,
+  "final_decision": "refuse",
+  "final_answer": {
+    "question": "What is the company's policy on pet insurance?",
+    "answer": "I don't have enough grounded evidence to answer this question from the available documents. Reason: Query appears out of scope and retrieved evidence is weak. Best available scores: [0.091287, 0.070014, 0.066227].",
+    "reason": "Query appears out of scope and retrieved evidence is weak.",
+    "best_scores": [
+      0.091287,
+      0.070014,
+      0.066227
+    ],
+    "citations": [],
+    "is_refusal": true
+  },
+  "retry_count": 0,
+  "completed_at": "2026-05-09T13:07:08.677676+00:00"
+}

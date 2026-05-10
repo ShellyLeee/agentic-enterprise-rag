@@ -1,0 +1,81 @@
+project:
+  name: agentic-enterprise-rag
+  environment: local
+
+paths:
+  raw_docs: data/raw_docs
+  processed: data/processed
+  eval: data/eval
+  results: results
+  trace_dir: results/traces
+  vector_store: data/processed/vector_index
+
+models:
+  chat_model: gpt-4o-mini
+  embedding_model: BAAI/bge-small-en-v1.5
+  reranker_model: BAAI/bge-reranker-base
+
+llm:
+  model: gpt-4o-mini
+  temperature: 0.0
+  mock: false
+
+ingestion:
+  parser_backend: docling
+  chunk_size_tokens: 600
+  chunk_overlap_tokens: 80
+  preserve_parent_pages: true
+  table_enrichment: false
+
+retrieval:
+  top_k: 20
+  initial_top_k: 10
+  retrieve_k: 10
+  rerank_top_k: 8
+  rerank_top_n: 5
+  parent_document_strategy: page
+  query_rewriting: true
+
+reranker:
+  model: BAAI/bge-reranker-base
+  backend: auto
+  fallback: true
+
+generation:
+  max_context_chunks: 5
+
+agent:
+  max_steps: 6
+  require_citations: true
+  allow_answer_without_evidence: false
+  min_citations: 1
+  min_top_rerank_score: 0.5
+  min_supporting_chunks: 1
+  max_retries: 1
+  weak_evidence_margin: 0.1
+  default_policy: balanced
+  policy_presets:
+    conservative:
+      min_top_rerank_score: 0.62
+      min_supporting_chunks: 2
+      max_retries: 1
+      weak_evidence_margin: 0.08
+    balanced:
+      min_top_rerank_score: 0.5
+      min_supporting_chunks: 1
+      max_retries: 1
+      weak_evidence_margin: 0.1
+    aggressive:
+      min_top_rerank_score: 0.22
+      min_supporting_chunks: 1
+      max_retries: 1
+      weak_evidence_margin: 0.08
+
+evaluation:
+  golden_set_path: data/eval/golden_questions.jsonl
+  metrics:
+    - answer_exactness
+    - citation_support
+    - retrieval_recall
+    - latency
+    - cost
