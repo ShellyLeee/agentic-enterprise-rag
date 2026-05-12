@@ -140,6 +140,16 @@ python scripts/run_eval.py \
   --output_dir results/eval_policy_sweep
 ```
 
+Convert the local RAG-Challenge-2 test set to the same eval JSONL schema:
+
+```bash
+python scripts/convert_rag_challenge_testset.py \
+  --questions data/external/rag_challenge_2/test_set/questions.json \
+  --answers data/external/rag_challenge_2/test_set/answers_max_nst_o3m.json \
+  --subset data/external/rag_challenge_2/test_set/subset.csv \
+  --output data/eval/rag_challenge_test_set.jsonl
+```
+
 ## Example Outputs
 
 Grounded answer:
