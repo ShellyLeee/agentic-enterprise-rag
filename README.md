@@ -150,6 +150,36 @@ python scripts/convert_rag_challenge_testset.py \
   --output data/eval/rag_challenge_test_set.jsonl
 ```
 
+Run the full local RAG-Challenge-2 pipeline:
+
+```bash
+scripts/run_rag_challenge_pipeline.sh
+```
+
+## Slurm: RAG-Challenge-2 Test Set
+
+The Slurm launchers activate the `agent_env` conda environment, parse PDFs from
+`data/raw_docs/rag_challenge_test_set`, build `data/processed/rag_challenge_test_index`,
+convert the test questions, and write evaluation outputs to `results/rag_challenge_test_eval`.
+
+```bash
+chmod +x scripts/run_rag_challenge_pipeline.sh scripts/slurm/*.sbatch
+
+# GPU default: partition 4090, gpu:1, 8 CPUs, 48G, 4 hours.
+sbatch scripts/slurm/run_rag_challenge_eval.sbatch
+
+# CPU fallback: 8 CPUs, 48G, 6 hours.
+sbatch scripts/slurm/run_rag_challenge_eval_cpu.sbatch
+```
+
+Both Slurm scripts keep `--mock` enabled by default so retrieval, reranking, and
+policy behavior can be evaluated without an LLM API key. To use a real LLM:
+
+```bash
+export OPENAI_API_KEY=...
+RAG_CHALLENGE_EVAL_MOCK=0 sbatch --export=ALL scripts/slurm/run_rag_challenge_eval.sbatch
+```
+
 ## Example Outputs
 
 Grounded answer:
