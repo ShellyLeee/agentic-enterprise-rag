@@ -14,10 +14,18 @@ class RerankTool:
     name = "rerank_evidence"
     description = "Rerank retrieved evidence chunks for a query."
 
-    def __init__(self, *, model_name: str, backend: str = "auto", fallback: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        model_name: str,
+        backend: str = "auto",
+        fallback: bool = True,
+        reranker: Reranker | None = None,
+    ) -> None:
         self.model_name = model_name
         self.backend = backend
         self.fallback = fallback
+        self.reranker = reranker
 
     def run(
         self,
@@ -27,7 +35,7 @@ class RerankTool:
         top_n: int,
     ) -> dict[str, Any]:
         """Rerank retrieved chunks."""
-        reranker = Reranker(model_name=self.model_name, backend=self.backend, fallback=self.fallback)
+        reranker = self.reranker or Reranker(model_name=self.model_name, backend=self.backend, fallback=self.fallback)
         reranked = reranker.rerank(query, retrieved_chunks, top_n=top_n)
         return {
             "query": query,
@@ -39,4 +47,3 @@ class RerankTool:
     def as_langchain_tool(self) -> Any | None:
         """Return a LangChain-compatible tool when available."""
         return make_langchain_tool(self.name, self.description, self.run)
-

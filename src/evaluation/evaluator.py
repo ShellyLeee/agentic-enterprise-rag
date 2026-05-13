@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
@@ -24,6 +25,9 @@ from src.generation.llm_client import LLMClient
 from src.retrieval.reranker import Reranker
 from src.retrieval.retriever import Retriever
 from src.tools import AnswerTool, QueryRewriteTool, RefusalTool, RerankTool, RetrievalTool
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -49,6 +53,18 @@ class EvaluatorConfig:
     agent_policy_presets: dict[str, dict[str, Any]] | None = None
 
 
+@dataclass
+class EvaluationRuntime:
+    """Shared components constructed once per evaluation run."""
+
+    retriever: Retriever
+    reranker: Reranker | None
+    llm_client: LLMClient
+    answer_generator: AnswerGenerator
+    agent_tools: AgentTools | None
+    agent_executors: dict[str, RagAgentExecutor]
+
+
 class ThreeSystemEvaluator:
     """Evaluate Naive RAG, RAG+Reranker, and Agentic RAG on one dataset."""
 
@@ -70,11 +86,13 @@ class ThreeSystemEvaluator:
         all_metrics = {}
         all_results = {}
         expanded_methods = self._expand_methods(methods, agent_policies)
+        runtime = self._build_runtime(expanded_methods)
         for method in expanded_methods:
             method = method.strip()
             if not method:
                 continue
-            results = [self._run_one(method, row) for row in rows]
+            LOGGER.info("Running method %s", method)
+            results = [self._run_one(method, row, runtime) for row in rows]
             metrics = self._aggregate(method, rows, results)
             all_metrics[method] = metrics
             all_results[method] = results
@@ -93,17 +111,17 @@ class ThreeSystemEvaluator:
         )
         return all_metrics
 
-    def _run_one(self, method: str, row: EvalQuestion) -> dict[str, Any]:
+    def _run_one(self, method: str, row: EvalQuestion, runtime: EvaluationRuntime) -> dict[str, Any]:
         """Run one method on one question and return raw result plus metrics inputs."""
         started = perf_counter()
         if method == "naive":
-            result = self._run_naive(row.question)
+            result = self._run_naive(row.question, runtime)
         elif method == "rerank":
-            result = self._run_rerank(row.question)
+            result = self._run_rerank(row.question, runtime)
         elif method == "agentic":
-            result = self._run_agentic(row.question, self.config.agent_policy_name)
+            result = self._run_agentic(row.question, self.config.agent_policy_name, runtime)
         elif method.startswith("agentic_"):
-            result = self._run_agentic(row.question, method.removeprefix("agentic_"))
+            result = self._run_agentic(row.question, method.removeprefix("agentic_"), runtime)
         else:
             raise ValueError(f"Unsupported eval method: {method}")
         result["latency_seconds"] = round(perf_counter() - started, 4)
@@ -114,11 +132,10 @@ class ThreeSystemEvaluator:
         result["mock_mode"] = self.config.mock
         return result
 
-    def _run_naive(self, question: str) -> dict[str, Any]:
+    def _run_naive(self, question: str, runtime: EvaluationRuntime) -> dict[str, Any]:
         """Run baseline A."""
-        retriever = Retriever.load(self.config.index_dir, embedding_model=self.config.embedding_model)
-        retrieved = retriever.retrieve(question, top_k=self.config.rerank_top_n)
-        answer = self._answer_generator().generate(question, retrieved)
+        retrieved = runtime.retriever.retrieve(question, top_k=self.config.rerank_top_n)
+        answer = runtime.answer_generator.generate(question, retrieved)
         return {
             "answer": answer.answer,
             "decision": "answer",
@@ -128,17 +145,14 @@ class ThreeSystemEvaluator:
             "system": "naive",
         }
 
-    def _run_rerank(self, question: str) -> dict[str, Any]:
+    def _run_rerank(self, question: str, runtime: EvaluationRuntime) -> dict[str, Any]:
         """Run baseline B."""
-        retriever = Retriever.load(self.config.index_dir, embedding_model=self.config.embedding_model)
-        retrieved = retriever.retrieve(question, top_k=self.config.retrieve_k)
-        reranker = Reranker(
-            model_name=self.config.reranker_model,
-            backend=self.config.reranker_backend,
-            fallback=self.config.reranker_fallback,
-        )
+        if runtime.reranker is None:
+            raise RuntimeError("Reranker was not initialized for rerank evaluation.")
+        reranker = runtime.reranker
+        retrieved = runtime.retriever.retrieve(question, top_k=self.config.retrieve_k)
         reranked = reranker.rerank(question, retrieved, top_n=self.config.rerank_top_n)
-        answer = self._answer_generator().generate(question, reranked)
+        answer = runtime.answer_generator.generate(question, reranked)
         return {
             "answer": answer.answer,
             "decision": "answer",
@@ -149,36 +163,11 @@ class ThreeSystemEvaluator:
             "system": "rerank",
         }
 
-    def _run_agentic(self, question: str, policy_name: str) -> dict[str, Any]:
+    def _run_agentic(self, question: str, policy_name: str, runtime: EvaluationRuntime) -> dict[str, Any]:
         """Run agentic workflow."""
-        policy_config = self._agent_policy_config(policy_name)
-        llm_client = self._llm_client()
-        tools = AgentTools(
-            retrieval=RetrievalTool(embedding_model=self.config.embedding_model),
-            rerank=RerankTool(
-                model_name=self.config.reranker_model,
-                backend=self.config.reranker_backend,
-                fallback=self.config.reranker_fallback,
-            ),
-            rewrite=QueryRewriteTool(llm_client),
-            answer=AnswerTool(AnswerGenerator(llm_client, max_context_chunks=self.config.max_context_chunks)),
-            refusal=RefusalTool(),
-        )
-        executor = RagAgentExecutor(
-            planner=AgentPlanner(),
-            policy=EvidencePolicy(
-                EvidencePolicyConfig(
-                    min_top_rerank_score=float(policy_config["min_top_rerank_score"]),
-                    min_supporting_chunks=int(policy_config["min_supporting_chunks"]),
-                    max_retries=int(policy_config["max_retries"]),
-                    weak_evidence_margin=float(policy_config["weak_evidence_margin"]),
-                )
-            ),
-            tools=tools,
-            index_dir=self.config.index_dir,
-            initial_top_k=self.config.retrieve_k,
-            rerank_top_n=self.config.rerank_top_n,
-        )
+        executor = runtime.agent_executors.get(policy_name)
+        if executor is None:
+            raise RuntimeError(f"Agent executor was not initialized for policy: {policy_name}")
         trace = executor.run(question)
         final = trace.get("final_answer") or {}
         latest_retrieval = trace["retrieval_results"][-1]["retrieved_chunks"] if trace["retrieval_results"] else []
@@ -194,6 +183,73 @@ class ThreeSystemEvaluator:
             "policy_name": policy_name,
             "system": f"agentic_{policy_name}",
         }
+
+    def _build_runtime(self, expanded_methods: list[str]) -> EvaluationRuntime:
+        """Initialize shared retriever, reranker, LLM, tools, and agent executors once."""
+        LOGGER.info("Initializing shared retriever...")
+        retriever = Retriever.load(self.config.index_dir, embedding_model=self.config.embedding_model)
+
+        needs_reranker = any(method == "rerank" or method == "agentic" or method.startswith("agentic_") for method in expanded_methods)
+        reranker = None
+        if needs_reranker:
+            LOGGER.info("Initializing shared reranker...")
+            reranker = Reranker(
+                model_name=self.config.reranker_model,
+                backend=self.config.reranker_backend,
+                fallback=self.config.reranker_fallback,
+            )
+
+        llm_client = self._llm_client()
+        answer_generator = AnswerGenerator(llm_client, max_context_chunks=self.config.max_context_chunks)
+
+        agent_policy_names = self._agent_policy_names(expanded_methods)
+        agent_tools = None
+        agent_executors: dict[str, RagAgentExecutor] = {}
+        if agent_policy_names:
+            if reranker is None:
+                raise RuntimeError("Reranker was not initialized for agentic evaluation.")
+            agent_tools = AgentTools(
+                retrieval=RetrievalTool(embedding_model=self.config.embedding_model, retriever=retriever),
+                rerank=RerankTool(
+                    model_name=self.config.reranker_model,
+                    backend=self.config.reranker_backend,
+                    fallback=self.config.reranker_fallback,
+                    reranker=reranker,
+                ),
+                rewrite=QueryRewriteTool(llm_client),
+                answer=AnswerTool(answer_generator),
+                refusal=RefusalTool(),
+            )
+            for policy_name in agent_policy_names:
+                agent_executors[policy_name] = self._build_agent_executor(policy_name, agent_tools)
+
+        return EvaluationRuntime(
+            retriever=retriever,
+            reranker=reranker,
+            llm_client=llm_client,
+            answer_generator=answer_generator,
+            agent_tools=agent_tools,
+            agent_executors=agent_executors,
+        )
+
+    def _build_agent_executor(self, policy_name: str, tools: AgentTools) -> RagAgentExecutor:
+        """Build one agent executor for a policy preset."""
+        policy_config = self._agent_policy_config(policy_name)
+        return RagAgentExecutor(
+            planner=AgentPlanner(),
+            policy=EvidencePolicy(
+                EvidencePolicyConfig(
+                    min_top_rerank_score=float(policy_config["min_top_rerank_score"]),
+                    min_supporting_chunks=int(policy_config["min_supporting_chunks"]),
+                    max_retries=int(policy_config["max_retries"]),
+                    weak_evidence_margin=float(policy_config["weak_evidence_margin"]),
+                )
+            ),
+            tools=tools,
+            index_dir=self.config.index_dir,
+            initial_top_k=self.config.retrieve_k,
+            rerank_top_n=self.config.rerank_top_n,
+        )
 
     def _aggregate(
         self,
@@ -277,6 +333,20 @@ class ThreeSystemEvaluator:
                 expanded.append(method)
         return expanded
 
+    def _agent_policy_names(self, expanded_methods: list[str]) -> list[str]:
+        """Return unique agent policy names needed by expanded methods."""
+        policy_names: list[str] = []
+        for method in expanded_methods:
+            if method == "agentic":
+                policy_name = self.config.agent_policy_name
+            elif method.startswith("agentic_"):
+                policy_name = method.removeprefix("agentic_")
+            else:
+                continue
+            if policy_name not in policy_names:
+                policy_names.append(policy_name)
+        return policy_names
+
     def _agent_policy_config(self, policy_name: str) -> dict[str, Any]:
         """Return policy thresholds for a named preset, falling back to config values."""
         presets = self.config.agent_policy_presets or {}
@@ -298,10 +368,6 @@ class ThreeSystemEvaluator:
             temperature=self.config.llm_temperature,
             mock=self.config.mock,
         )
-
-    def _answer_generator(self) -> AnswerGenerator:
-        """Create an answer generator."""
-        return AnswerGenerator(self._llm_client(), max_context_chunks=self.config.max_context_chunks)
 
     @staticmethod
     def _comparison_table(all_metrics: dict[str, dict[str, Any]]) -> str:

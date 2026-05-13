@@ -18,6 +18,9 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.evaluation import EvaluatorConfig, ThreeSystemEvaluator
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 def load_config(path: Path) -> dict[str, Any]:
     """Load YAML config."""
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -79,6 +82,7 @@ def main() -> None:
     config = load_config(Path(args.config))
     methods = [method.strip() for method in args.methods.split(",") if method.strip()]
     agent_policies = [policy.strip() for policy in args.agent_policies.split(",") if policy.strip()]
+    LOGGER.info("Starting evaluation run...")
     metrics = ThreeSystemEvaluator(evaluator_config(config, args)).run(
         eval_file=args.eval_file,
         methods=methods,
