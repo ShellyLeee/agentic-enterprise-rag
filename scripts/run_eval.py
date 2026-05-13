@@ -68,7 +68,11 @@ def evaluator_config(config: dict[str, Any], args: argparse.Namespace) -> Evalua
         llm_model=str(llm.get("model", "gpt-4o-mini")),
         llm_temperature=float(llm.get("temperature", 0.0)),
         mock=bool(args.mock or llm.get("mock", False)),
-        agent_min_top_rerank_score=float(selected_policy.get("min_top_rerank_score", agent.get("min_top_rerank_score", 0.5))),
+        agent_score_mode=str(selected_policy.get("score_mode", agent.get("score_mode", "hybrid"))),
+        agent_min_top_retrieval_score=float(
+            selected_policy.get("min_top_retrieval_score", agent.get("min_top_retrieval_score", 0.65))
+        ),
+        agent_min_top_rerank_score=float(selected_policy.get("min_top_rerank_score", agent.get("min_top_rerank_score", 0.005))),
         agent_min_supporting_chunks=int(selected_policy.get("min_supporting_chunks", agent.get("min_supporting_chunks", 1))),
         agent_max_retries=int(selected_policy.get("max_retries", agent.get("max_retries", 1))),
         agent_weak_evidence_margin=float(selected_policy.get("weak_evidence_margin", agent.get("weak_evidence_margin", 0.1))),

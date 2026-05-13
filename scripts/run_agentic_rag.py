@@ -109,10 +109,14 @@ def main() -> None:
     )
     policy = EvidencePolicy(
         EvidencePolicyConfig(
-            min_top_rerank_score=float(selected_policy.get("min_top_rerank_score", 0.5)),
-            min_supporting_chunks=int(selected_policy.get("min_supporting_chunks", 1)),
-            max_retries=int(selected_policy.get("max_retries", 1)),
-            weak_evidence_margin=float(selected_policy.get("weak_evidence_margin", 0.1)),
+            score_mode=str(selected_policy.get("score_mode", agent_config.get("score_mode", "hybrid"))),
+            min_top_retrieval_score=float(
+                selected_policy.get("min_top_retrieval_score", agent_config.get("min_top_retrieval_score", 0.65))
+            ),
+            min_top_rerank_score=float(selected_policy.get("min_top_rerank_score", agent_config.get("min_top_rerank_score", 0.005))),
+            min_supporting_chunks=int(selected_policy.get("min_supporting_chunks", agent_config.get("min_supporting_chunks", 1))),
+            max_retries=int(selected_policy.get("max_retries", agent_config.get("max_retries", 1))),
+            weak_evidence_margin=float(selected_policy.get("weak_evidence_margin", agent_config.get("weak_evidence_margin", 0.1))),
         )
     )
     executor = RagAgentExecutor(
@@ -162,6 +166,14 @@ def main() -> None:
         print(f"missing_fields={', '.join(trace['missing_fields'])}")
     if trace.get("followup_queries"):
         print("followup_queries=" + " | ".join(trace["followup_queries"]))
+    if trace.get("evidence_statistics"):
+        stats = trace["evidence_statistics"][-1]
+        print("\nEvidence Stats")
+        print(f"score_mode={stats.get('score_mode')}")
+        print(f"max_retrieval_score={stats.get('max_retrieval_score')}")
+        print(f"max_rerank_score={stats.get('max_rerank_score')}")
+        print(f"num_chunks_above_retrieval_threshold={stats.get('num_chunks_above_retrieval_threshold')}")
+        print(f"num_chunks_above_rerank_threshold={stats.get('num_chunks_above_rerank_threshold')}")
     print("\nTop Evidence")
     for index, chunk in enumerate(final_evidence[:5], start=1):
         metadata = chunk.get("metadata", {})

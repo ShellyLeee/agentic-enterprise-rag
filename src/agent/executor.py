@@ -123,6 +123,7 @@ class RagAgentExecutor:
                 query_type=plan.query_type,
                 reranked_chunks=evidence_chunks,
                 retry_count=retry_count,
+                question=question,
             )
             loop_had_gap = False
 
@@ -141,6 +142,7 @@ class RagAgentExecutor:
                 query_type=plan.query_type,
                 reranked_chunks=evidence_chunks,
                 retry_count=retry_count,
+                question=question,
             )
             if loop_had_gap:
                 trace["evidence_loop_improved_policy_decision"] = (
@@ -264,9 +266,21 @@ class RagAgentExecutor:
                 "reason": result.reason,
                 "retry_count": retry_count,
                 "top_rerank_score": result.stats.top_rerank_score,
+                "top_retrieval_score": result.stats.top_retrieval_score,
+                "max_rerank_score": result.stats.top_rerank_score,
+                "max_retrieval_score": result.stats.top_retrieval_score,
                 "supporting_chunks": result.stats.supporting_chunks,
                 "threshold": result.stats.threshold,
+                "rerank_threshold": result.stats.rerank_threshold,
+                "retrieval_threshold": result.stats.retrieval_threshold,
                 "scores": result.stats.scores,
+                "rerank_scores": result.stats.rerank_scores,
+                "retrieval_scores": result.stats.retrieval_scores,
+                "num_chunks_above_rerank_threshold": result.stats.num_chunks_above_rerank_threshold,
+                "num_chunks_above_retrieval_threshold": result.stats.num_chunks_above_retrieval_threshold,
+                "lexical_match_terms": result.stats.lexical_match_terms,
+                "has_strong_lexical_match": result.stats.has_strong_lexical_match,
+                "score_mode": result.stats.score_mode,
             }
         )
 

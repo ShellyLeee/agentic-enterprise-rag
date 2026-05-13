@@ -49,7 +49,9 @@ agent:
   require_citations: true
   allow_answer_without_evidence: false
   min_citations: 1
-  min_top_rerank_score: 0.5
+  score_mode: hybrid
+  min_top_retrieval_score: 0.65
+  min_top_rerank_score: 0.005
   min_supporting_chunks: 1
   max_retries: 1
   weak_evidence_margin: 0.1
@@ -63,17 +65,23 @@ agent:
   default_policy: balanced
   policy_presets:
     conservative:
-      min_top_rerank_score: 0.62
+      score_mode: hybrid
+      min_top_retrieval_score: 0.72
+      min_top_rerank_score: 0.01
       min_supporting_chunks: 2
       max_retries: 1
       weak_evidence_margin: 0.08
     balanced:
-      min_top_rerank_score: 0.5
+      score_mode: hybrid
+      min_top_retrieval_score: 0.65
+      min_top_rerank_score: 0.005
       min_supporting_chunks: 1
       max_retries: 1
       weak_evidence_margin: 0.1
     aggressive:
-      min_top_rerank_score: 0.22
+      score_mode: hybrid
+      min_top_retrieval_score: 0.5
+      min_top_rerank_score: 0.001
       min_supporting_chunks: 1
       max_retries: 1
       weak_evidence_margin: 0.08

@@ -45,6 +45,8 @@ class EvaluatorConfig:
     llm_model: str
     llm_temperature: float
     mock: bool
+    agent_score_mode: str
+    agent_min_top_retrieval_score: float
     agent_min_top_rerank_score: float
     agent_min_supporting_chunks: int
     agent_max_retries: int
@@ -245,10 +247,14 @@ class ThreeSystemEvaluator:
             planner=AgentPlanner(),
             policy=EvidencePolicy(
                 EvidencePolicyConfig(
-                    min_top_rerank_score=float(policy_config["min_top_rerank_score"]),
-                    min_supporting_chunks=int(policy_config["min_supporting_chunks"]),
-                    max_retries=int(policy_config["max_retries"]),
-                    weak_evidence_margin=float(policy_config["weak_evidence_margin"]),
+                    score_mode=str(policy_config.get("score_mode", self.config.agent_score_mode)),
+                    min_top_retrieval_score=float(
+                        policy_config.get("min_top_retrieval_score", self.config.agent_min_top_retrieval_score)
+                    ),
+                    min_top_rerank_score=float(policy_config.get("min_top_rerank_score", self.config.agent_min_top_rerank_score)),
+                    min_supporting_chunks=int(policy_config.get("min_supporting_chunks", self.config.agent_min_supporting_chunks)),
+                    max_retries=int(policy_config.get("max_retries", self.config.agent_max_retries)),
+                    weak_evidence_margin=float(policy_config.get("weak_evidence_margin", self.config.agent_weak_evidence_margin)),
                 )
             ),
             tools=tools,
@@ -369,6 +375,8 @@ class ThreeSystemEvaluator:
         if policy_name != self.config.agent_policy_name and presets:
             raise ValueError(f"Unknown agent policy preset: {policy_name}")
         return {
+            "score_mode": self.config.agent_score_mode,
+            "min_top_retrieval_score": self.config.agent_min_top_retrieval_score,
             "min_top_rerank_score": self.config.agent_min_top_rerank_score,
             "min_supporting_chunks": self.config.agent_min_supporting_chunks,
             "max_retries": self.config.agent_max_retries,
