@@ -40,6 +40,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         help="Comma-separated agent policy presets to sweep when method includes agentic.",
     )
+    parser.add_argument("--disable_evidence_loop", action="store_true", help="Disable agentic iterative evidence seeking.")
     return parser
 
 
@@ -51,6 +52,7 @@ def evaluator_config(config: dict[str, Any], args: argparse.Namespace) -> Evalua
     generation = config.get("generation", {})
     llm = config.get("llm", {})
     agent = config.get("agent", {})
+    evidence_loop = agent.get("evidence_loop", {})
     policy_presets = agent.get("policy_presets", {})
     default_policy = str(agent.get("default_policy", "balanced"))
     selected_policy = policy_presets.get(default_policy, {})
@@ -72,6 +74,12 @@ def evaluator_config(config: dict[str, Any], args: argparse.Namespace) -> Evalua
         agent_weak_evidence_margin=float(selected_policy.get("weak_evidence_margin", agent.get("weak_evidence_margin", 0.1))),
         agent_policy_name=default_policy,
         agent_policy_presets=policy_presets,
+        evidence_loop_enabled=bool(evidence_loop.get("enabled", True)) and not bool(args.disable_evidence_loop),
+        evidence_loop_max_followup_queries=int(evidence_loop.get("max_followup_queries", 2)),
+        evidence_loop_followup_top_k=int(evidence_loop.get("followup_top_k", 5)),
+        evidence_loop_followup_rerank_top_n=int(evidence_loop.get("followup_rerank_top_n", 3)),
+        evidence_loop_merge_strategy=str(evidence_loop.get("merge_strategy", "append_top_unique")),
+        evidence_loop_min_gap_detection_score=float(evidence_loop.get("min_gap_detection_score", 0.0)),
     )
 
 

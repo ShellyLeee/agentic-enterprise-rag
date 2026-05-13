@@ -18,12 +18,15 @@ from src.agent import (
     AgentPlanner,
     AgentTools,
     AgentTraceLogger,
+    EvidenceLoopConfig,
     EvidencePolicy,
     EvidencePolicyConfig,
     RagAgentExecutor,
 )
 from src.generation.answer_generator import AnswerGenerator
 from src.generation.llm_client import LLMClient
+from src.retrieval.reranker import Reranker
+from src.retrieval.retriever import Retriever
 from src.tools import AnswerTool, QueryRewriteTool, RefusalTool, RerankTool, RetrievalTool
 
 
@@ -40,6 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default="configs/default.yaml", help="YAML config path.")
     parser.add_argument("--mock", action="store_true", help="Force deterministic mock LLM mode.")
     parser.add_argument("--save_trace", help="Optional JSON trace path.")
+    parser.add_argument("--disable_evidence_loop", action="store_true", help="Disable iterative evidence seeking.")
+    parser.add_argument("--max_followup_queries", type=int, help="Override evidence-loop follow-up query limit.")
     parser.add_argument(
         "--agent_policy",
         choices=["conservative", "balanced", "aggressive"],
@@ -60,6 +65,11 @@ def main() -> None:
     generation_config = config.get("generation", {})
     llm_config = config.get("llm", {})
     agent_config = config.get("agent", {})
+    evidence_loop_config = dict(agent_config.get("evidence_loop", {}))
+    if args.disable_evidence_loop:
+        evidence_loop_config["enabled"] = False
+    if args.max_followup_queries is not None:
+        evidence_loop_config["max_followup_queries"] = args.max_followup_queries
     policy_name = args.agent_policy or agent_config.get("default_policy", "balanced")
     policy_presets = agent_config.get("policy_presets", {})
     selected_policy = policy_presets.get(policy_name)
@@ -71,12 +81,22 @@ def main() -> None:
         temperature=float(llm_config.get("temperature", 0.0)),
         mock=bool(args.mock or llm_config.get("mock", False)),
     )
+    retriever = Retriever.load(args.index_dir, embedding_model=str(models.get("embedding_model", "BAAI/bge-small-en-v1.5")))
+    reranker = Reranker(
+        model_name=str(reranker_config.get("model", "BAAI/bge-reranker-base")),
+        backend=str(reranker_config.get("backend", "auto")),
+        fallback=bool(reranker_config.get("fallback", True)),
+    )
     tools = AgentTools(
-        retrieval=RetrievalTool(embedding_model=str(models.get("embedding_model", "BAAI/bge-small-en-v1.5"))),
+        retrieval=RetrievalTool(
+            embedding_model=str(models.get("embedding_model", "BAAI/bge-small-en-v1.5")),
+            retriever=retriever,
+        ),
         rerank=RerankTool(
             model_name=str(reranker_config.get("model", "BAAI/bge-reranker-base")),
             backend=str(reranker_config.get("backend", "auto")),
             fallback=bool(reranker_config.get("fallback", True)),
+            reranker=reranker,
         ),
         rewrite=QueryRewriteTool(llm_client),
         answer=AnswerTool(
@@ -102,12 +122,20 @@ def main() -> None:
         index_dir=args.index_dir,
         initial_top_k=int(retrieval_config.get("initial_top_k", retrieval_config.get("retrieve_k", 10))),
         rerank_top_n=int(retrieval_config.get("rerank_top_n", 5)),
+        evidence_loop=EvidenceLoopConfig(
+            enabled=bool(evidence_loop_config.get("enabled", True)),
+            max_followup_queries=int(evidence_loop_config.get("max_followup_queries", 2)),
+            followup_top_k=int(evidence_loop_config.get("followup_top_k", 5)),
+            followup_rerank_top_n=int(evidence_loop_config.get("followup_rerank_top_n", 3)),
+            merge_strategy=str(evidence_loop_config.get("merge_strategy", "append_top_unique")),
+            min_gap_detection_score=float(evidence_loop_config.get("min_gap_detection_score", 0.0)),
+        ),
     )
     trace = executor.run(args.question)
 
     final = trace["final_answer"] or {}
     rewrite_used = bool(trace.get("rewritten_query"))
-    latest_rerank = trace["rerank_results"][-1]["reranked_chunks"] if trace["rerank_results"] else []
+    final_evidence = final.get("evidence_used") or (trace["rerank_results"][-1]["reranked_chunks"] if trace["rerank_results"] else [])
 
     trace_path = None
     if args.save_trace:
@@ -127,8 +155,15 @@ def main() -> None:
     print("yes" if rewrite_used else "no")
     if rewrite_used:
         print(f"rewritten_query={trace['rewritten_query']}")
+    print("\nEvidence Loop")
+    print("enabled" if not args.disable_evidence_loop and evidence_loop_config.get("enabled", True) else "disabled")
+    print(f"evidence_gap_detected={trace.get('evidence_gap_detected')}")
+    if trace.get("missing_fields"):
+        print(f"missing_fields={', '.join(trace['missing_fields'])}")
+    if trace.get("followup_queries"):
+        print("followup_queries=" + " | ".join(trace["followup_queries"]))
     print("\nTop Evidence")
-    for index, chunk in enumerate(latest_rerank[:5], start=1):
+    for index, chunk in enumerate(final_evidence[:5], start=1):
         metadata = chunk.get("metadata", {})
         print(
             f"{index}. retrieval_score={chunk.get('retrieval_score')} "

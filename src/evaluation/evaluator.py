@@ -9,7 +9,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any
 
-from src.agent import AgentPlanner, AgentTools, EvidencePolicy, EvidencePolicyConfig, RagAgentExecutor
+from src.agent import AgentPlanner, AgentTools, EvidenceLoopConfig, EvidencePolicy, EvidencePolicyConfig, RagAgentExecutor
 from src.evaluation.dataset import EvalQuestion, load_eval_dataset
 from src.evaluation.metrics import (
     exact_match,
@@ -51,6 +51,12 @@ class EvaluatorConfig:
     agent_weak_evidence_margin: float
     agent_policy_name: str = "balanced"
     agent_policy_presets: dict[str, dict[str, Any]] | None = None
+    evidence_loop_enabled: bool = True
+    evidence_loop_max_followup_queries: int = 2
+    evidence_loop_followup_top_k: int = 5
+    evidence_loop_followup_rerank_top_n: int = 3
+    evidence_loop_merge_strategy: str = "append_top_unique"
+    evidence_loop_min_gap_detection_score: float = 0.0
 
 
 @dataclass
@@ -249,6 +255,14 @@ class ThreeSystemEvaluator:
             index_dir=self.config.index_dir,
             initial_top_k=self.config.retrieve_k,
             rerank_top_n=self.config.rerank_top_n,
+            evidence_loop=EvidenceLoopConfig(
+                enabled=self.config.evidence_loop_enabled,
+                max_followup_queries=self.config.evidence_loop_max_followup_queries,
+                followup_top_k=self.config.evidence_loop_followup_top_k,
+                followup_rerank_top_n=self.config.evidence_loop_followup_rerank_top_n,
+                merge_strategy=self.config.evidence_loop_merge_strategy,
+                min_gap_detection_score=self.config.evidence_loop_min_gap_detection_score,
+            ),
         )
 
     def _aggregate(
@@ -394,6 +408,8 @@ class ThreeSystemEvaluator:
             "# Evaluation Comparison",
             "",
             "Smoke-test metrics on a tiny sample dataset; not benchmark results.",
+            "",
+            "Agentic methods include iterative evidence-seeking when enabled in the run configuration.",
             "",
             "| " + " | ".join(headers) + " |",
             "| " + " | ".join(["---"] * len(headers)) + " |",

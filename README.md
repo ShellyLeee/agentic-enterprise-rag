@@ -25,6 +25,10 @@ Retrieval Tool
   ↓
 Rerank Tool
   ↓
+Evidence Gap Detector
+   ├── answer-ready evidence
+   └── follow-up retrieval for missing fields
+  ↓
 Evidence-aware Policy
    ├── answer
    ├── rewrite query and retry
@@ -40,6 +44,7 @@ Core capabilities:
 - Sentence-transformers embeddings when available, with a deterministic hashing fallback.
 - Cross-encoder reranking when available, with a deterministic lexical fallback.
 - Query rewriting for weak evidence retries.
+- Iterative evidence-seeking follow-up retrieval when top evidence is incomplete.
 - Grounded refusal when the document set does not support an answer.
 - Trace logging for agent decisions, retrieval results, reranking scores, policy statistics, and final output.
 

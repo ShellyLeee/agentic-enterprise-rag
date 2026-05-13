@@ -53,6 +53,13 @@ agent:
   min_supporting_chunks: 1
   max_retries: 1
   weak_evidence_margin: 0.1
+  evidence_loop:
+    enabled: true
+    max_followup_queries: 2
+    followup_top_k: 5
+    followup_rerank_top_n: 3
+    merge_strategy: append_top_unique
+    min_gap_detection_score: 0.0
   default_policy: balanced
   policy_presets:
     conservative:
