@@ -45,6 +45,7 @@ Core capabilities:
 - Cross-encoder reranking when available, with a deterministic lexical fallback.
 - Query rewriting for weak evidence retries.
 - Iterative evidence-seeking follow-up retrieval when top evidence is incomplete.
+- Metadata lookup for document-to-company identity when source files use SHA-style names.
 - Grounded refusal when the document set does not support an answer.
 - Trace logging for agent decisions, retrieval results, reranking scores, policy statistics, and final output.
 

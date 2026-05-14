@@ -52,6 +52,7 @@ def evaluator_config(config: dict[str, Any], args: argparse.Namespace) -> Evalua
     generation = config.get("generation", {})
     llm = config.get("llm", {})
     agent = config.get("agent", {})
+    metadata = config.get("metadata", {})
     evidence_loop = agent.get("evidence_loop", {})
     policy_presets = agent.get("policy_presets", {})
     default_policy = str(agent.get("default_policy", "balanced"))
@@ -84,6 +85,7 @@ def evaluator_config(config: dict[str, Any], args: argparse.Namespace) -> Evalua
         evidence_loop_followup_rerank_top_n=int(evidence_loop.get("followup_rerank_top_n", 3)),
         evidence_loop_merge_strategy=str(evidence_loop.get("merge_strategy", "append_top_unique")),
         evidence_loop_min_gap_detection_score=float(evidence_loop.get("min_gap_detection_score", 0.0)),
+        metadata_subset_csv=metadata.get("subset_csv"),
     )
 
 

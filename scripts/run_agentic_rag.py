@@ -27,7 +27,7 @@ from src.generation.answer_generator import AnswerGenerator
 from src.generation.llm_client import LLMClient
 from src.retrieval.reranker import Reranker
 from src.retrieval.retriever import Retriever
-from src.tools import AnswerTool, QueryRewriteTool, RefusalTool, RerankTool, RetrievalTool
+from src.tools import AnswerTool, MetadataLookupTool, QueryRewriteTool, RefusalTool, RerankTool, RetrievalTool
 
 
 def load_config(config_path: Path) -> dict[str, Any]:
@@ -65,6 +65,7 @@ def main() -> None:
     generation_config = config.get("generation", {})
     llm_config = config.get("llm", {})
     agent_config = config.get("agent", {})
+    metadata_config = config.get("metadata", {})
     evidence_loop_config = dict(agent_config.get("evidence_loop", {}))
     if args.disable_evidence_loop:
         evidence_loop_config["enabled"] = False
@@ -106,6 +107,7 @@ def main() -> None:
             )
         ),
         refusal=RefusalTool(),
+        metadata_lookup=MetadataLookupTool(subset_csv=metadata_config.get("subset_csv")),
     )
     policy = EvidencePolicy(
         EvidencePolicyConfig(
@@ -166,6 +168,7 @@ def main() -> None:
         print(f"missing_fields={', '.join(trace['missing_fields'])}")
     if trace.get("followup_queries"):
         print("followup_queries=" + " | ".join(trace["followup_queries"]))
+    print(f"metadata_lookup_used={trace.get('metadata_lookup_used')}")
     if trace.get("evidence_statistics"):
         stats = trace["evidence_statistics"][-1]
         print("\nEvidence Stats")

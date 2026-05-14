@@ -16,7 +16,7 @@ from uuid import uuid4
 from src.agent.evidence_gap import EvidenceGapDetector
 from src.agent.planner import AgentPlanner
 from src.agent.policy import EvidencePolicy, PolicyResult
-from src.tools import AnswerTool, QueryRewriteTool, RefusalTool, RerankTool, RetrievalTool
+from src.tools import AnswerTool, MetadataLookupTool, QueryRewriteTool, RefusalTool, RerankTool, RetrievalTool
 
 
 @dataclass
@@ -28,6 +28,7 @@ class AgentTools:
     rewrite: QueryRewriteTool
     answer: AnswerTool
     refusal: RefusalTool
+    metadata_lookup: MetadataLookupTool | None = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,8 @@ class RagAgentExecutor:
             "merged_evidence_count": 0,
             "final_evidence_count": 0,
             "evidence_loop_improved_policy_decision": False,
+            "metadata_lookup_used": False,
+            "metadata_lookup_results": [],
             "rewritten_query": None,
             "final_decision": None,
             "final_answer": None,
@@ -220,6 +223,10 @@ class RagAgentExecutor:
             trace["merged_evidence_count"] = len(merged_evidence)
             return {"has_gap": False, "merged_evidence": merged_evidence}
 
+        if "company_name" in gap["missing_fields"]:
+            metadata_chunks = self._lookup_metadata_evidence(initial_evidence, trace)
+            merged_evidence = self._insert_metadata_evidence(merged_evidence, metadata_chunks)
+
         for followup_query in gap["followup_queries"][: self.evidence_loop.max_followup_queries]:
             retrieval_output = self.tools.retrieval.run(
                 query=followup_query,
@@ -245,6 +252,54 @@ class RagAgentExecutor:
 
         trace["merged_evidence_count"] = len(merged_evidence)
         return {"has_gap": True, "merged_evidence": merged_evidence}
+
+    def _lookup_metadata_evidence(
+        self,
+        evidence_chunks: list[dict[str, Any]],
+        trace: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Lookup source metadata and return synthetic evidence chunks."""
+        if not self.tools.metadata_lookup:
+            return []
+        source_ids = self._source_ids_from_chunks(evidence_chunks)
+        if not source_ids:
+            return []
+
+        lookup_output = self.tools.metadata_lookup.run(source_ids=source_ids)
+        self._record_tool(trace, "MetadataLookupTool", lookup_output)
+        trace["metadata_lookup_results"].append(lookup_output)
+        matches = lookup_output.get("matches", [])
+        if not matches:
+            return []
+
+        trace["metadata_lookup_used"] = True
+        metadata_chunks = []
+        for match in matches:
+            company_name = match.get("company_name")
+            metadata = match.get("metadata", {})
+            source_id = match.get("matched_id") or match.get("source_id")
+            if not company_name or not source_id:
+                continue
+            text = f"Document metadata: source {source_id}.pdf corresponds to company {company_name}."
+            if metadata.get("major_industry"):
+                text += f" Major industry: {metadata['major_industry']}."
+            metadata_chunks.append(
+                {
+                    "chunk_id": f"metadata_lookup:{source_id}",
+                    "text": text,
+                    "metadata": {
+                        **metadata,
+                        "type": "metadata_lookup",
+                        "source_id": source_id,
+                        "file_name": f"{source_id}.pdf",
+                        "section_title": "Document Metadata",
+                    },
+                    "score": 1.0,
+                    "retrieval_score": 1.0,
+                    "rerank_score": 1.0,
+                }
+            )
+        return metadata_chunks
 
     @staticmethod
     def _record_tool(trace: dict[str, Any], tool_name: str, output: dict[str, Any]) -> None:
@@ -301,6 +356,45 @@ class RagAgentExecutor:
             merged.append(chunk)
             seen.add(key)
         return merged
+
+    def _insert_metadata_evidence(
+        self,
+        base_chunks: list[dict[str, Any]],
+        metadata_chunks: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Place metadata chunks near the front so answer generation can use them."""
+        merged = list(base_chunks)
+        for metadata_chunk in reversed(metadata_chunks):
+            if self._chunk_key(metadata_chunk) in {self._chunk_key(chunk) for chunk in merged}:
+                continue
+            merged.insert(1 if merged else 0, metadata_chunk)
+        return merged
+
+    @staticmethod
+    def _source_ids_from_chunks(chunks: list[dict[str, Any]]) -> list[str]:
+        """Extract source filename stems, document ids, and SHA-like ids from chunks."""
+        identifiers: list[str] = []
+        for chunk in chunks[:5]:
+            metadata = chunk.get("metadata", {})
+            candidates = [
+                metadata.get("pdf_sha1"),
+                metadata.get("sha1"),
+                metadata.get("document_id"),
+                metadata.get("source_id"),
+                metadata.get("file_name"),
+                metadata.get("source_path"),
+                chunk.get("document_id"),
+            ]
+            for candidate in candidates:
+                if not candidate:
+                    continue
+                identifier = str(candidate)
+                name = identifier.rsplit("/", 1)[-1]
+                stem = name[:-4] if name.lower().endswith(".pdf") else name
+                for value in (identifier, name, stem):
+                    if value and value not in identifiers:
+                        identifiers.append(value)
+        return identifiers
 
     @staticmethod
     def _chunk_key(chunk: dict[str, Any]) -> str:

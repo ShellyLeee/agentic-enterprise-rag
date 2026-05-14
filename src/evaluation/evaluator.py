@@ -24,7 +24,7 @@ from src.generation.answer_generator import AnswerGenerator
 from src.generation.llm_client import LLMClient
 from src.retrieval.reranker import Reranker
 from src.retrieval.retriever import Retriever
-from src.tools import AnswerTool, QueryRewriteTool, RefusalTool, RerankTool, RetrievalTool
+from src.tools import AnswerTool, MetadataLookupTool, QueryRewriteTool, RefusalTool, RerankTool, RetrievalTool
 
 
 LOGGER = logging.getLogger(__name__)
@@ -59,6 +59,7 @@ class EvaluatorConfig:
     evidence_loop_followup_rerank_top_n: int = 3
     evidence_loop_merge_strategy: str = "append_top_unique"
     evidence_loop_min_gap_detection_score: float = 0.0
+    metadata_subset_csv: str | None = None
 
 
 @dataclass
@@ -227,6 +228,7 @@ class ThreeSystemEvaluator:
                 rewrite=QueryRewriteTool(llm_client),
                 answer=AnswerTool(answer_generator),
                 refusal=RefusalTool(),
+                metadata_lookup=MetadataLookupTool(subset_csv=self.config.metadata_subset_csv),
             )
             for policy_name in agent_policy_names:
                 agent_executors[policy_name] = self._build_agent_executor(policy_name, agent_tools)

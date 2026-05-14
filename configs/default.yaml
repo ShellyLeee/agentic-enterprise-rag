@@ -10,6 +10,9 @@ paths:
   trace_dir: results/traces
   vector_store: data/processed/vector_index
 
+metadata:
+  subset_csv: data/external/rag_challenge_2/test_set/subset.csv
+
 models:
   chat_model: gpt-4o-mini
   embedding_model: BAAI/bge-small-en-v1.5
