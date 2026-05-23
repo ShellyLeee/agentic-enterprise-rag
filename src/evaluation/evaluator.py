@@ -60,6 +60,10 @@ class EvaluatorConfig:
     evidence_loop_merge_strategy: str = "append_top_unique"
     evidence_loop_min_gap_detection_score: float = 0.0
     metadata_subset_csv: str | None = None
+    llm_base_url: str | None = None
+    llm_api_key: str | None = None
+    llm_max_tokens: int | None = None
+    llm_timeout: float | None = None
 
 
 @dataclass
@@ -388,8 +392,12 @@ class ThreeSystemEvaluator:
     def _llm_client(self) -> LLMClient:
         """Create an LLM client for generation/rewrite."""
         return LLMClient(
-            model=self.config.llm_model,
+            base_url=self.config.llm_base_url,
+            api_key=self.config.llm_api_key,
+            model_name=self.config.llm_model,
             temperature=self.config.llm_temperature,
+            max_tokens=self.config.llm_max_tokens,
+            timeout=self.config.llm_timeout,
             mock=self.config.mock,
         )
 

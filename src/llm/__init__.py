@@ -1,4 +1,4 @@
-"""Backward-compatible import path for the unified LLM client."""
+"""LLM clients and provider adapters."""
 
 from src.llm.client import LLMClient, LLMResponse
 

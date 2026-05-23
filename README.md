@@ -63,6 +63,7 @@ agentic-enterprise-rag/
 ├── scripts/             # CLI entrypoints
 └── src/
     ├── agent/           # Planner, evidence policy, executor, trace logger
+    ├── eval/            # HotpotQA/FinanceBench benchmark loaders and metrics
     ├── evaluation/      # Dataset loader, metrics, evaluator
     ├── generation/      # LLM client and answer generation
     ├── indexing/        # Embeddings and vector index persistence
@@ -71,6 +72,62 @@ agentic-enterprise-rag/
     ├── schemas/         # Pydantic data contracts
     └── tools/           # Retrieval, rerank, rewrite, answer, refusal tools
 ```
+
+## Local LLM Serving with vLLM
+
+The default real-LLM path uses a local vLLM OpenAI-compatible server for Qwen3-8B. The Agent process does not load model weights with `transformers.from_pretrained()`; it calls the API at `http://localhost:8000/v1`.
+
+Install project dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Install vLLM in the serving environment. It is optional for clients, but required on the machine that hosts the local model:
+
+```bash
+pip install "vllm>=0.5"
+```
+
+Start the local Qwen3-8B API:
+
+```bash
+bash scripts/serve_qwen3_8b_vllm.sh
+```
+
+The script serves `/data/common/LLMs/Qwen3-8B` as model name `qwen3-8b` on port `8000`.
+
+Test the API:
+
+```bash
+python scripts/test_llm_api.py
+```
+
+Equivalent direct API check:
+
+```bash
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer EMPTY" \
+  -d '{
+    "model": "qwen3-8b",
+    "messages": [{"role": "user", "content": "Who wrote the novel Pride and Prejudice?"}],
+    "temperature": 0,
+    "max_tokens": 64
+  }'
+```
+
+Default Agent LLM config:
+
+```yaml
+llm:
+  provider: openai_compatible
+  base_url: http://localhost:8000/v1
+  api_key: EMPTY
+  model_name: qwen3-8b
+```
+
+Use `--mock` only when you explicitly want the deterministic smoke-test backend.
 
 ## Quick Start
 
@@ -145,6 +202,66 @@ python scripts/run_eval.py \
   --mock \
   --output_dir results/eval_policy_sweep
 ```
+
+Run HotpotQA no-RAG benchmark evaluation:
+
+```bash
+python scripts/run_eval.py \
+  --dataset hotpotqa \
+  --max_examples 100 \
+  --setting no_rag
+```
+
+Run HotpotQA RAG benchmark evaluation:
+
+```bash
+python scripts/run_eval.py \
+  --dataset hotpotqa \
+  --max_examples 100 \
+  --setting rag \
+  --top_k 5
+```
+
+Run FinanceBench sample RAG evaluation from HuggingFace:
+
+```bash
+python scripts/run_eval.py \
+  --dataset financebench \
+  --financebench_source hf \
+  --max_examples 50 \
+  --setting rag \
+  --top_k 5
+```
+
+Benchmark outputs are written to `outputs/eval_results/{dataset}_{setting}_{timestamp}.jsonl` and a matching summary JSON. Each row includes `prediction`, EM/F1, retrieved docs, and retrieval hit.
+
+FinanceBench sample can be loaded directly from HuggingFace:
+
+```bash
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting rag --top_k 5
+```
+
+The HuggingFace version contains 150 open-source sample examples. The full FinanceBench has 10,000+ examples and requires contacting the authors. Current evaluation uses the provided `evidence` field as the document corpus for benchmark-native RAG:
+
+```text
+question + provided evidence/context -> retrieval -> LLM answer -> EM/F1/retrieval hit
+```
+
+This stage does not download or parse original PDFs. A later document-level RAG mode can use `doc_link` PDFs with Docling parsing, chunking, retrieval, and LLM answering.
+
+Local FinanceBench samples are still supported:
+
+```bash
+python scripts/run_eval.py \
+  --dataset financebench \
+  --financebench_source local \
+  --financebench_local_path data/financebench/sample.jsonl \
+  --max_examples 50 \
+  --setting rag \
+  --top_k 5
+```
+
+For local loading, place a JSON, JSONL, or CSV sample under `data/financebench/`, or pass a specific file with `--financebench_local_path`. The parser is intentionally permissive for public samples and hand-curated subsets. Large benchmark data and generated outputs are ignored by git.
 
 Convert the local RAG-Challenge-2 test set to the same eval JSONL schema:
 

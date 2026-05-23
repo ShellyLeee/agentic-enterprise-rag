@@ -19,9 +19,19 @@ models:
   reranker_model: BAAI/bge-reranker-base
 
 llm:
-  model: gpt-4o-mini
+  provider: openai_compatible
+  base_url: http://localhost:8000/v1
+  api_key: EMPTY
+  model_name: qwen3-8b
   temperature: 0.0
+  max_tokens: 512
+  timeout: 120
   mock: false
+
+eval:
+  output_dir: outputs/eval_results
+  top_k: 5
+  max_examples: 100
 
 ingestion:
   parser_backend: docling

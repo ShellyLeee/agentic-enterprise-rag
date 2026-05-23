@@ -77,11 +77,7 @@ def main() -> None:
     if selected_policy is None:
         raise ValueError(f"Unknown agent policy preset: {policy_name}")
 
-    llm_client = LLMClient(
-        model=llm_config.get("model"),
-        temperature=float(llm_config.get("temperature", 0.0)),
-        mock=bool(args.mock or llm_config.get("mock", False)),
-    )
+    llm_client = LLMClient(llm_config, mock=bool(args.mock or llm_config.get("mock", False)))
     retriever = Retriever.load(args.index_dir, embedding_model=str(models.get("embedding_model", "BAAI/bge-small-en-v1.5")))
     reranker = Reranker(
         model_name=str(reranker_config.get("model", "BAAI/bge-reranker-base")),

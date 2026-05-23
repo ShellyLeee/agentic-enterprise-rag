@@ -64,11 +64,7 @@ def main() -> None:
     )
     reranked = reranker.rerank(args.question, retrieved, top_n=rerank_top_n)
 
-    llm_client = LLMClient(
-        model=llm_config.get("model"),
-        temperature=float(llm_config.get("temperature", 0.0)),
-        mock=bool(args.mock or llm_config.get("mock", False)),
-    )
+    llm_client = LLMClient(llm_config, mock=bool(args.mock or llm_config.get("mock", False)))
     generator = AnswerGenerator(
         llm_client,
         max_context_chunks=int(generation_config.get("max_context_chunks", rerank_top_n)),
@@ -78,6 +74,7 @@ def main() -> None:
     payload = {
         "question": answer.question,
         "answer": answer.answer,
+        "prediction": answer.answer,
         "llm": {"mode": answer.llm_mode, "model": answer.llm_model},
         "reranker": {"backend": reranker.backend_used, "model": reranker.model_name},
         "citations": answer.citations,
@@ -110,4 +107,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

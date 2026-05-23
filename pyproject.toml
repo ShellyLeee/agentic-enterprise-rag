@@ -8,12 +8,17 @@ dependencies = [
   "pydantic>=2.7,<3",
   "pyyaml>=6.0",
   "python-dotenv>=1.0",
+  "openai>=1.30",
+  "datasets>=2.19",
+  "pandas>=2.2",
+  "tqdm>=4.66",
   "langchain>=0.3",
   "langchain-community>=0.3",
   "langchain-openai>=0.2",
   "langgraph>=0.2",
   "faiss-cpu>=1.8",
   "sentence-transformers>=3.0",
+  "scikit-learn>=1.4",
   "rank-bm25>=0.2",
   "tiktoken>=0.8",
   "typer>=0.12",
@@ -22,6 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6", "mypy>=1.11"]
+llm-serving = ["vllm>=0.5"]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -30,4 +36,3 @@ include = ["src*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-

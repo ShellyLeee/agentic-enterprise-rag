@@ -53,11 +53,7 @@ def main() -> None:
     llm_config = config.get("llm", {})
     generation_config = config.get("generation", {})
 
-    llm_client = LLMClient(
-        model=llm_config.get("model"),
-        temperature=float(llm_config.get("temperature", 0.0)),
-        mock=bool(args.mock or llm_config.get("mock", False)),
-    )
+    llm_client = LLMClient(llm_config, mock=bool(args.mock or llm_config.get("mock", False)))
 
     retrieval_tool = RetrievalTool(embedding_model=embedding_model)
     rerank_tool = RerankTool(
@@ -115,4 +111,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

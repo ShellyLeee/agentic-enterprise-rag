@@ -49,11 +49,7 @@ def main() -> None:
     retriever = Retriever.load(Path(args.index_dir), embedding_model=model_name)
     retrieved = retriever.retrieve(args.question, top_k=args.top_k)
 
-    llm_client = LLMClient(
-        model=llm_config.get("model"),
-        temperature=float(llm_config.get("temperature", 0.0)),
-        mock=bool(args.mock or llm_config.get("mock", False)),
-    )
+    llm_client = LLMClient(llm_config, mock=bool(args.mock or llm_config.get("mock", False)))
     generator = AnswerGenerator(
         llm_client,
         max_context_chunks=int(generation_config.get("max_context_chunks", args.top_k)),
@@ -62,6 +58,7 @@ def main() -> None:
     payload = {
         "question": answer.question,
         "answer": answer.answer,
+        "prediction": answer.answer,
         "llm": {
             "mode": answer.llm_mode,
             "model": answer.llm_model,
@@ -94,4 +91,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

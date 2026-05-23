@@ -23,6 +23,7 @@ class AnswerTool:
         return {
             "question": answer.question,
             "answer": answer.answer,
+            "prediction": answer.answer,
             "citations": answer.citations,
             "evidence_used": answer.retrieved_chunks,
             "llm_mode": answer.llm_mode,
@@ -32,4 +33,3 @@ class AnswerTool:
     def as_langchain_tool(self) -> Any | None:
         """Return a LangChain-compatible tool when available."""
         return make_langchain_tool(self.name, self.description, self.run)
-
