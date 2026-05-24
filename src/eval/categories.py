@@ -14,7 +14,26 @@ def categorize_example(example: QAExample, dataset_name: str) -> list[str]:
         return _financebench_categories(example)
     if dataset == "hotpotqa":
         return _hotpotqa_categories(example)
+    if dataset == "rag_challenge_test_set":
+        return _rag_challenge_categories(example)
     return ["unknown"]
+
+
+def _rag_challenge_categories(example: QAExample) -> list[str]:
+    """Tag custom RAG-Challenge rows by authored category metadata."""
+    metadata = example.metadata or {}
+    categories = ["rag_challenge_test_set"]
+    question_type = str(metadata.get("type") or "").strip()
+    difficulty = str(metadata.get("difficulty") or "").strip()
+    if question_type:
+        categories.append(question_type)
+    if difficulty:
+        categories.append(difficulty)
+    if metadata.get("requires_rewrite"):
+        categories.append("requires_rewrite")
+    if metadata.get("requires_multi_hop"):
+        categories.append("requires_multi_hop")
+    return _unique(categories)
 
 
 def _financebench_categories(example: QAExample) -> list[str]:

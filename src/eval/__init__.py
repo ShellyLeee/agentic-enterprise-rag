@@ -1,5 +1,6 @@
 """Benchmark evaluation helpers."""
 
+from src.eval.datasets import load_rag_challenge_test_set
 from src.eval.loaders import load_financebench, load_financebench_sample, load_hotpotqa
 from src.eval.metrics import (
     boolean_accuracy_score,
@@ -25,6 +26,7 @@ __all__ = [
     "load_financebench",
     "load_financebench_sample",
     "load_hotpotqa",
+    "load_rag_challenge_test_set",
     "mrr",
     "numeric_match_score",
     "retrieval_hit_at_k",

@@ -32,6 +32,7 @@ from src.eval import (
     f1_score,
     load_financebench,
     load_hotpotqa,
+    load_rag_challenge_test_set,
     mrr,
     numeric_match_score,
     retrieval_hit_at_k,
@@ -42,6 +43,7 @@ from src.evaluation import EvaluatorConfig, ThreeSystemEvaluator
 from src.llm import LLMClient, LLMGeneration
 from src.prompts.qa_prompts import system_prompt_for_setting, user_prompt
 from src.retrieval.reranker import Reranker
+from src.retrieval.retriever import Retriever
 from src.retrieval.simple_retriever import SimpleRetriever
 
 
@@ -80,7 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default="configs/default.yaml", help="YAML config path.")
     parser.add_argument("--mock", action="store_true", help="Force deterministic mock LLM mode.")
 
-    parser.add_argument("--dataset", choices=["hotpotqa", "financebench"], help="Benchmark dataset.")
+    parser.add_argument(
+        "--dataset",
+        choices=["hotpotqa", "financebench", "rag_challenge_test_set"],
+        help="Benchmark dataset.",
+    )
     parser.add_argument("--setting", choices=BENCHMARK_SETTINGS, help="Benchmark setting.")
     parser.add_argument("--max_examples", type=int, help="Maximum benchmark examples.")
     parser.add_argument("--top_k", type=int, help="Top-k retrieved documents for RAG benchmark.")
@@ -110,6 +116,16 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["evidence", "pdf"],
         default="evidence",
         help="FinanceBench corpus mode. Current implementation supports evidence; pdf is a future extension point.",
+    )
+    parser.add_argument(
+        "--rag_challenge_path",
+        default="data/eval/rag_challenge_test_set.jsonl",
+        help="Custom RAG-Challenge benchmark JSONL path.",
+    )
+    parser.add_argument(
+        "--rag_challenge_index_dir",
+        default="data/processed/rag_challenge_test_index",
+        help="Custom RAG-Challenge vector index directory.",
     )
     parser.add_argument("--output_dir", help="Benchmark output directory.")
 
@@ -186,6 +202,8 @@ def _load_examples(dataset: str, max_examples: int | None, args: argparse.Namesp
             source=args.financebench_source,
             local_path=local_path,
         )
+    if dataset == "rag_challenge_test_set":
+        return load_rag_challenge_test_set(path=args.rag_challenge_path, max_examples=max_examples)
     raise ValueError(f"Unsupported dataset: {dataset}")
 
 
@@ -202,8 +220,10 @@ def _run_one_benchmark_example(
     categories = categorize_example(example, dataset_name)
     agent_trace: dict[str, Any] | None = None
     if setting == "iterative_agentic_rag":
+        retriever = _rag_challenge_retriever(args) if dataset_name == "rag_challenge_test_set" else None
         agent_result = BenchmarkAgenticRunner(
             llm_client=client,
+            retriever=retriever,
             top_k=top_k,
             retrieve_top_n=args.retrieve_top_n,
             max_iterations=args.max_iterations,
@@ -221,7 +241,7 @@ def _run_one_benchmark_example(
         agent_trace = agent_result["agent_trace"]
         weak_evidence = bool(agent_trace.get("weak_evidence"))
     else:
-        retrieved_docs = _retrieve_for_setting(example, setting, top_k, args)
+        retrieved_docs = _retrieve_for_setting(example, dataset_name, setting, top_k, args)
         weak_evidence = False
         generation = _generate_prediction(client, example, dataset_name, setting, retrieved_docs)
     prediction = generation.prediction
@@ -247,6 +267,7 @@ def _run_one_benchmark_example(
         "evidence_recall_at_k": evidence_recall,
         "mrr": reciprocal_rank,
         "weak_evidence": weak_evidence,
+        "refusal_correct": _refusal_correct(example, prediction),
         "agent_trace": agent_trace,
         "latency_sec": round(latency, 4),
         "metadata": example.metadata or {},
@@ -255,6 +276,7 @@ def _run_one_benchmark_example(
 
 def _retrieve_for_setting(
     example: QAExample,
+    dataset_name: str,
     setting: str,
     top_k: int,
     args: argparse.Namespace,
@@ -262,6 +284,14 @@ def _retrieve_for_setting(
     """Retrieve context documents according to the requested benchmark setting."""
     if setting == "no_rag":
         return []
+
+    if dataset_name == "rag_challenge_test_set":
+        retriever = _rag_challenge_retriever(args)
+        if setting == "reranker_rag":
+            candidates = retriever.retrieve(example.question, top_k=args.retrieve_top_n)
+            reranker = Reranker(backend="fallback")
+            return reranker.rerank(example.question, candidates, top_n=args.rerank_top_k)
+        return retriever.retrieve(example.question, top_k=top_k)
 
     retriever = SimpleRetriever()
     retriever.index(example.documents or [])
@@ -293,9 +323,10 @@ def _format_context(documents: list[dict[str, Any]]) -> str:
         parts.append(
             f"[chunk:{index}:{document.get('chunk_id', index)}]\n"
             f"title: {document.get('title', '')}\n"
-            f"source: {document.get('source', '')}\n"
+            f"source: {document.get('source_doc') or document.get('source', '')}\n"
+            f"page: {document.get('page_num', '')}\n"
             f"score: {document.get('score')}\n"
-            f"text: {document.get('text', '')}"
+            f"text: {document.get('chunk_text') or document.get('text', '')}"
         )
     return "\n\n---\n\n".join(parts)
 
@@ -320,6 +351,7 @@ def _summarize(
             "llm": _safe_llm_config(config.get("llm", {})),
             "eval": {**config.get("eval", {}), "top_k": top_k},
             "financebench_mode": "evidence",
+            "rag_challenge_mode": "vector_index" if dataset == "rag_challenge_test_set" else None,
         },
     }
 
@@ -349,6 +381,7 @@ def _print_summary(summary: dict[str, Any], result_path: Path, summary_path: Pat
         "evidence_recall_at_k",
         "mrr",
         "abstention_rate",
+        "refusal_accuracy",
         "avg_latency_sec",
         "avg_retry_count",
         "rewrite_rate",
@@ -397,6 +430,7 @@ def _aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "evidence_recall_at_k": _mean([row["evidence_recall_at_k"] for row in rows]),
         "mrr": _mean([row["mrr"] for row in rows]),
         "abstention_rate": _mean([1.0 if row["abstained"] else 0.0 for row in rows]),
+        "refusal_accuracy": _mean_present([row.get("refusal_correct") for row in rows]),
         "avg_latency_sec": _mean([row["latency_sec"] for row in rows]),
         "avg_retry_count": _mean([_trace_number(row, "retry_count") for row in rows]),
         "rewrite_rate": _mean([1.0 if _trace_list(row, "rewritten_queries") else 0.0 for row in rows]),
@@ -443,6 +477,63 @@ def _trace_list(row: dict[str, Any], key: str) -> list[Any]:
     trace = row.get("agent_trace") or {}
     value = trace.get(key, [])
     return value if isinstance(value, list) else []
+
+
+class _RagChallengeRetriever:
+    """Small adapter that normalizes persisted vector-index chunks for eval rows."""
+
+    def __init__(self, retriever: Retriever) -> None:
+        self.retriever = retriever
+        self.backend = retriever.backend_info.get("backend", retriever.backend)
+        self.index_dir = retriever.index_dir
+
+    def retrieve(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+        return [_normalize_retrieved_doc(doc) for doc in self.retriever.retrieve(query, top_k=top_k)]
+
+
+_RAG_CHALLENGE_RETRIEVER_CACHE: dict[str, _RagChallengeRetriever] = {}
+
+
+def _rag_challenge_retriever(args: argparse.Namespace) -> _RagChallengeRetriever:
+    """Load/cache the custom benchmark persisted vector retriever."""
+    index_dir = str(Path(args.rag_challenge_index_dir))
+    cached = _RAG_CHALLENGE_RETRIEVER_CACHE.get(index_dir)
+    if cached is not None:
+        return cached
+    retriever = Retriever.load(index_dir)
+    wrapped = _RagChallengeRetriever(retriever)
+    LOGGER.info("RAG-Challenge vector index loaded from %s with backend=%s", wrapped.index_dir, wrapped.backend)
+    _RAG_CHALLENGE_RETRIEVER_CACHE[index_dir] = wrapped
+    return wrapped
+
+
+def _normalize_retrieved_doc(doc: dict[str, Any]) -> dict[str, Any]:
+    """Expose stable retrieval fields for custom benchmark metrics/debugging."""
+    metadata = doc.get("metadata") or {}
+    doc_name = doc.get("doc_name") or metadata.get("file_name") or metadata.get("doc_name")
+    page_num = doc.get("page_num") or doc.get("page_number") or metadata.get("page_number") or metadata.get("page_num")
+    text = str(doc.get("text") or doc.get("chunk_text") or "")
+    return {
+        **doc,
+        "chunk_id": doc.get("chunk_id") or metadata.get("chunk_id") or doc.get("id"),
+        "source_doc": doc.get("source_doc") or doc_name or doc.get("source"),
+        "doc_name": doc_name or doc.get("source_doc") or doc.get("source"),
+        "page_num": page_num,
+        "chunk_text": text,
+        "text": text,
+        "title": doc.get("title") or doc_name or doc.get("source"),
+        "source": doc.get("source") or doc_name,
+    }
+
+
+def _refusal_correct(example: QAExample, prediction: str) -> float | None:
+    """Return refusal correctness for OOD/custom abstention examples."""
+    metadata = example.metadata or {}
+    is_ood = str(metadata.get("type") or "").lower() == "ood"
+    gold_abstention = any(detect_abstention(answer) for answer in example.answers)
+    if not is_ood and not gold_abstention:
+        return None
+    return 1.0 if detect_abstention(prediction) else 0.0
 
 
 def _run_legacy_eval(config: dict[str, Any], args: argparse.Namespace) -> None:

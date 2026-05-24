@@ -154,19 +154,34 @@ def _any_doc_matches_evidence(docs: list[dict[str, Any]], evidence: dict[str, An
 
 def _doc_matches_evidence(doc: dict[str, Any], evidence: dict[str, Any]) -> bool:
     """Return true when one retrieved doc matches one evidence record."""
+    doc_chunk_id = str(doc.get("chunk_id") or doc.get("id") or "")
+    evidence_chunk_id = str(evidence.get("chunk_id") or "")
+    if evidence_chunk_id and doc_chunk_id and evidence_chunk_id == doc_chunk_id:
+        return True
+
     doc_title = normalize_answer(
         doc.get("title")
         or doc.get("doc_name")
+        or doc.get("source_doc")
         or doc.get("source")
         or doc.get("metadata", {}).get("title")
         or doc.get("metadata", {}).get("doc_name")
+        or doc.get("metadata", {}).get("file_name")
     )
-    evidence_title = normalize_answer(evidence.get("title") or evidence.get("doc_name") or evidence.get("source") or "")
+    evidence_title = normalize_answer(
+        evidence.get("title") or evidence.get("doc_name") or evidence.get("source_doc") or evidence.get("source") or ""
+    )
     if evidence_title and doc_title and evidence_title == doc_title:
         return True
 
-    doc_text = normalize_answer(doc.get("text", ""))
-    evidence_text = evidence.get("text") or evidence.get("sentence") or evidence.get("full_page_text") or ""
+    doc_text = normalize_answer(doc.get("text") or doc.get("chunk_text") or "")
+    evidence_text = (
+        evidence.get("text")
+        or evidence.get("evidence_text")
+        or evidence.get("sentence")
+        or evidence.get("full_page_text")
+        or ""
+    )
     return _partial_text_match(evidence_text, doc_text)
 
 
