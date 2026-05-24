@@ -12,12 +12,24 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from src.llm.postprocess import strip_thinking_blocks
+
 
 @dataclass(frozen=True)
 class LLMResponse:
     """Normalized chat completion response."""
 
     content: str
+    model: str
+    mode: str
+
+
+@dataclass(frozen=True)
+class LLMGeneration:
+    """Generated answer with raw and cleaned text."""
+
+    prediction: str
+    raw_prediction: str
     model: str
     mode: str
 
@@ -41,6 +53,8 @@ class LLMClient:
         max_tokens: int | None = None,
         timeout: float | None = None,
         mock: bool | None = None,
+        disable_thinking: bool | None = None,
+        strip_thinking: bool | None = None,
     ) -> None:
         raw_config = config or {}
         llm_config = raw_config.get("llm", raw_config) if isinstance(raw_config, dict) else {}
@@ -68,13 +82,29 @@ class LLMClient:
         self.max_tokens = int(configured_max_tokens) if configured_max_tokens is not None else None
         self.timeout = float(timeout if timeout is not None else llm_config.get("timeout", 120))
         self.mock = bool(mock if mock is not None else llm_config.get("mock", False))
+        self.disable_thinking = bool(
+            disable_thinking if disable_thinking is not None else llm_config.get("disable_thinking", False)
+        )
+        self.strip_thinking = bool(
+            strip_thinking if strip_thinking is not None else llm_config.get("strip_thinking", True)
+        )
 
     def generate(self, messages: list[dict[str, str]], **kwargs: Any) -> str:
         """Generate text from chat messages and return assistant content."""
+        return self.generate_with_raw(messages, **kwargs).prediction
+
+    def generate_with_raw(self, messages: list[dict[str, str]], **kwargs: Any) -> LLMGeneration:
+        """Generate text and return both raw and post-processed answers."""
         if not messages:
             raise ValueError("messages cannot be empty.")
         if self.mock:
-            return self._mock_answer(str(messages[-1].get("content", "")))
+            raw_prediction = self._mock_answer(str(messages[-1].get("content", "")))
+            return LLMGeneration(
+                prediction=self._postprocess(raw_prediction),
+                raw_prediction=raw_prediction,
+                model="mock-extractive",
+                mode="mock",
+            )
 
         try:
             from openai import OpenAI
@@ -92,6 +122,12 @@ class LLMClient:
         max_tokens = kwargs.pop("max_tokens", self.max_tokens)
         if max_tokens is not None:
             request_kwargs["max_tokens"] = max_tokens
+        if self.disable_thinking and self.provider in {"openai_compatible", "vllm"}:
+            request_kwargs["extra_body"] = {
+                "chat_template_kwargs": {
+                    "enable_thinking": False,
+                }
+            }
         request_kwargs.update(kwargs)
 
         try:
@@ -105,8 +141,13 @@ class LLMClient:
                 f"Original error: {exc}"
             ) from exc
 
-        content = response.choices[0].message.content
-        return (content or "").strip()
+        raw_prediction = (response.choices[0].message.content or "").strip()
+        return LLMGeneration(
+            prediction=self._postprocess(raw_prediction),
+            raw_prediction=raw_prediction,
+            model=str(request_kwargs["model"]),
+            mode="openai-compatible",
+        )
 
     def generate_from_prompt(
         self,
@@ -121,6 +162,19 @@ class LLMClient:
         messages.append({"role": "user", "content": prompt})
         return self.generate(messages, **kwargs)
 
+    def generate_from_prompt_with_raw(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        **kwargs: Any,
+    ) -> LLMGeneration:
+        """Generate raw and cleaned text from a prompt plus optional system prompt."""
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        return self.generate_with_raw(messages, **kwargs)
+
     def chat(self, *, system_prompt: str, user_prompt: str, **kwargs: Any) -> LLMResponse:
         """Backward-compatible chat wrapper used by existing RAG components."""
         content = self.generate_from_prompt(user_prompt, system_prompt=system_prompt, **kwargs)
@@ -129,6 +183,13 @@ class LLMClient:
             model="mock-extractive" if self.mock else self.model_name,
             mode="mock" if self.mock else "openai-compatible",
         )
+
+    def _postprocess(self, raw_output: str) -> str:
+        """Clean model output for answer metrics."""
+        output = raw_output.strip()
+        if self.strip_thinking:
+            output = strip_thinking_blocks(output)
+        return output.strip()
 
     def _mock_answer(self, user_prompt: str) -> str:
         """Produce a deterministic extractive answer from the provided context."""

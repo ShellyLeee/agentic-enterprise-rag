@@ -32,15 +32,17 @@ from src.eval import (
     retrieval_hit_at_k,
 )
 from src.evaluation import EvaluatorConfig, ThreeSystemEvaluator
-from src.llm import LLMClient
+from src.llm import LLMClient, LLMGeneration
 from src.retrieval.simple_retriever import SimpleRetriever
 
 
 LOGGER = logging.getLogger(__name__)
 
 QA_SYSTEM_PROMPT = (
-    "You are a helpful question-answering assistant. Answer the question based on the given context. "
-    "If the context is insufficient, say you are not sure."
+    "You are a concise and reliable question-answering assistant. "
+    "Do not output chain-of-thought, hidden reasoning, or <think> blocks. "
+    "Only provide the final answer. "
+    "When context is provided, answer based on the context. If the context is insufficient, say you are not sure."
 )
 
 
@@ -164,13 +166,15 @@ def _run_one_benchmark_example(
         retriever.index(example.documents or [])
         retrieved_docs = retriever.retrieve(example.question, top_k=top_k)
 
-    prediction = _generate_prediction(client, example.question, retrieved_docs)
+    generation = _generate_prediction(client, example.question, retrieved_docs)
+    prediction = generation.prediction
     latency = perf_counter() - started
     return {
         "id": example.id,
         "question": example.question,
         "gold_answers": example.answers,
         "prediction": prediction,
+        "raw_prediction": generation.raw_prediction,
         "retrieved_docs": retrieved_docs,
         "em": exact_match_score(prediction, example.answers),
         "f1": f1_score(prediction, example.answers),
@@ -180,7 +184,7 @@ def _run_one_benchmark_example(
     }
 
 
-def _generate_prediction(client: LLMClient, question: str, retrieved_docs: list[dict[str, Any]]) -> str:
+def _generate_prediction(client: LLMClient, question: str, retrieved_docs: list[dict[str, Any]]) -> LLMGeneration:
     """Generate an answer using optional retrieved context."""
     context = _format_context(retrieved_docs)
     prompt = f"""Question:
@@ -190,7 +194,7 @@ Context:
 {context}
 
 Answer:"""
-    return client.generate_from_prompt(prompt, system_prompt=QA_SYSTEM_PROMPT)
+    return client.generate_from_prompt_with_raw(prompt, system_prompt=QA_SYSTEM_PROMPT)
 
 
 def _format_context(documents: list[dict[str, Any]]) -> str:

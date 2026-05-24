@@ -125,7 +125,13 @@ llm:
   base_url: http://localhost:8000/v1
   api_key: EMPTY
   model_name: qwen3-8b
+  temperature: 0.0
+  max_tokens: 512
+  disable_thinking: true
+  strip_thinking: true
 ```
+
+Qwen3 may output thinking traces by default. This project disables thinking via `chat_template_kwargs.enable_thinking=false` when supported by vLLM, and also strips `<think>...</think>` blocks as a safety fallback so benchmark metrics are computed on the final answer only. Per-example benchmark JSONL stores cleaned `prediction` and raw `raw_prediction` for debugging.
 
 Use `--mock` only when you explicitly want the deterministic smoke-test backend.
 

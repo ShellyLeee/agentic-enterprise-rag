@@ -16,6 +16,14 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.llm import LLMClient
 
 
+TEST_SYSTEM_PROMPT = (
+    "You are a concise and reliable question-answering assistant. "
+    "Do not output chain-of-thought, hidden reasoning, or <think> blocks. "
+    "Only provide the final answer. "
+    "When context is provided, answer based on the context. If the context is insufficient, say you are not sure."
+)
+
+
 def load_config(path: Path) -> dict[str, Any]:
     """Load YAML config."""
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -39,7 +47,7 @@ def main() -> None:
     config = load_config(Path(args.config))
     client = LLMClient(config)
     try:
-        answer = client.generate_from_prompt(args.question, system_prompt="You are a helpful QA assistant.")
+        generation = client.generate_from_prompt_with_raw(args.question, system_prompt=TEST_SYSTEM_PROMPT)
     except RuntimeError as exc:
         raise SystemExit(
             f"LLM API test failed: {exc}\n"
@@ -49,8 +57,12 @@ def main() -> None:
 
     print("Question")
     print(args.question)
-    print("\nAnswer")
-    print(answer)
+    print("\nRaw Answer")
+    print(generation.raw_prediction)
+    print("\nCleaned Answer")
+    print(generation.prediction)
+    if "<think" in generation.prediction.lower() or "</think>" in generation.prediction.lower():
+        raise SystemExit("Cleaned answer still contains a <think> tag.")
 
 
 if __name__ == "__main__":
