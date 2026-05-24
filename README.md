@@ -41,20 +41,25 @@ benchmark 有意覆盖了企业检索中常见的困难情况：
 - noisy retrieval space
 - unsupported/OOD questions
 
-| setting | avg_em | avg_f1 |
-| --- | ---: | ---: |
-| no_rag | 0.000 | 0.074 |
-| basic_rag | 0.060 | 0.274 |
-| reranker_rag | 0.050 | 0.307 |
-| iterative_agentic_rag | 0.260 | 0.377 |
+Answer quality and retrieval metrics:
+
+| setting | n | EM | F1 | numeric_match | boolean_acc | retrieval_hit_rate | evidence_recall@5 | MRR |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| no_rag | 100 | 0.000 | 0.074 | 0.020 | 0.000 | 0.000 | 0.000 | 0.000 |
+| basic_rag | 100 | 0.060 | 0.274 | 0.180 | 0.000 | 0.800 | 0.800 | 0.788 |
+| reranker_rag | 100 | 0.050 | 0.307 | 0.240 | 0.000 | 0.800 | 0.800 | 0.775 |
+| iterative_agentic_rag | 100 | 0.260 | 0.377 | 0.170 | 0.000 | 0.800 | 0.800 | 0.788 |
+
+Abstention, agent behavior, and runtime metrics:
+
+| setting | abstention_rate | refusal_accuracy | avg_retry_count | rewrite_rate | evidence_gap_rate | final_evidence_count_avg | avg_latency_sec |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| no_rag | 0.800 | 0.550 | 0.000 | 0.000 | 0.000 | 0.000 | 0.194 |
+| basic_rag | 0.510 | 0.900 | 0.000 | 0.000 | 0.000 | 0.000 | 0.689 |
+| reranker_rag | 0.450 | 0.850 | 0.000 | 0.000 | 0.000 | 0.000 | 0.670 |
+| iterative_agentic_rag | 0.520 | 1.000 | 0.800 | 0.600 | 0.600 | 5.000 | 0.664 |
 
 在 noisy enterprise retrieval 条件下，iterative evidence refinement 带来了最明显的提升，相比 single-shot retrieval baseline 显著提高了 EM/F1。
-
-对于 `iterative_agentic_rag`：
-
-- `rewrite_rate`: 0.600
-- `evidence_gap_rate`: 0.600
-- `avg_retry_count`: 0.800
 
 典型 multi-hop case 中，问题需要把 2022 年的 acquisition 证据和 adjusted diluted EPS、adjusted ROE 等分散指标连接起来。初始检索没有拿到完整证据，agent 检测到 evidence gap 后重写查询，补充检索，并基于多轮证据生成答案。
 
@@ -67,16 +72,31 @@ benchmark 有意覆盖了企业检索中常见的困难情况：
 - HotpotQA uses dataset-provided context as the retrieval corpus.
 - FinanceBench uses dataset-provided evidence as the retrieval corpus.
 
-| dataset | setting | avg_em | avg_f1 |
-| --- | --- | ---: | ---: |
-| financebench | no_rag | 0.000 | 0.061 |
-| financebench | basic_rag | 0.000 | 0.207 |
-| financebench | reranker_rag | 0.000 | 0.208 |
-| financebench | iterative_agentic_rag | 0.000 | 0.119 |
-| hotpotqa | no_rag | 0.180 | 0.232 |
-| hotpotqa | basic_rag | 0.500 | 0.559 |
-| hotpotqa | reranker_rag | 0.480 | 0.565 |
-| hotpotqa | iterative_agentic_rag | 0.480 | 0.539 |
+Answer quality and retrieval metrics:
+
+| dataset | setting | n | EM | F1 | numeric_match | boolean_acc | retrieval_hit_rate | evidence_recall@5 | MRR |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| financebench | no_rag | 50 | 0.000 | 0.061 | 0.100 | 0.000 | 0.000 | 0.000 | 0.000 |
+| financebench | basic_rag | 50 | 0.000 | 0.207 | 0.440 | 0.300 | 1.000 | 1.000 | 1.000 |
+| financebench | reranker_rag | 50 | 0.000 | 0.208 | 0.440 | 0.300 | 1.000 | 1.000 | 1.000 |
+| financebench | iterative_agentic_rag | 50 | 0.000 | 0.119 | 0.260 | 0.000 | 1.000 | 1.000 | 1.000 |
+| hotpotqa | no_rag | 50 | 0.180 | 0.232 | 0.080 | 0.778 | 0.000 | 0.000 | 0.000 |
+| hotpotqa | basic_rag | 50 | 0.500 | 0.559 | 0.140 | 0.889 | 1.000 | 0.848 | 0.886 |
+| hotpotqa | reranker_rag | 50 | 0.480 | 0.565 | 0.140 | 0.889 | 1.000 | 0.809 | 0.857 |
+| hotpotqa | iterative_agentic_rag | 50 | 0.480 | 0.539 | 0.140 | 0.778 | 1.000 | 0.848 | 0.886 |
+
+Abstention, agent behavior, and runtime metrics:
+
+| dataset | setting | abstention_rate | avg_retry_count | rewrite_rate | evidence_gap_rate | final_evidence_count_avg | avg_latency_sec |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| financebench | no_rag | 0.700 | 0.000 | 0.000 | 0.000 | 0.000 | 0.420 |
+| financebench | basic_rag | 0.140 | 0.000 | 0.000 | 0.000 | 0.000 | 0.786 |
+| financebench | reranker_rag | 0.160 | 0.000 | 0.000 | 0.000 | 0.000 | 0.752 |
+| financebench | iterative_agentic_rag | 0.420 | 0.840 | 0.420 | 0.420 | 1.240 | 0.368 |
+| hotpotqa | no_rag | 0.360 | 0.000 | 0.000 | 0.000 | 0.000 | 0.133 |
+| hotpotqa | basic_rag | 0.220 | 0.000 | 0.000 | 0.000 | 0.000 | 0.194 |
+| hotpotqa | reranker_rag | 0.160 | 0.000 | 0.000 | 0.000 | 0.000 | 0.192 |
+| hotpotqa | iterative_agentic_rag | 0.240 | 0.420 | 0.340 | 0.340 | 4.940 | 0.194 |
 
 在 constrained benchmark-native retrieval setting 下，iterative refinement 主要体现为 evidence-aware abstention 和 retry behavior，而不是带来大幅检索增益。
 
