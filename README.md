@@ -228,6 +228,8 @@ python scripts/run_eval.py \
   --top_k 5
 ```
 
+`--setting rag` is kept as a backward-compatible alias for `basic_rag`.
+
 Run FinanceBench sample RAG evaluation from HuggingFace:
 
 ```bash
@@ -239,7 +241,7 @@ python scripts/run_eval.py \
   --top_k 5
 ```
 
-Benchmark outputs are written to `outputs/eval_results/{dataset}_{setting}_{timestamp}.jsonl` and a matching summary JSON. Each row includes `prediction`, EM/F1, retrieved docs, and retrieval hit.
+Benchmark outputs are written to `outputs/eval_results/{dataset}_{setting}_{timestamp}.jsonl` and a matching summary JSON. Each row includes `prediction`, `raw_prediction`, categories, EM/F1, numeric match, boolean accuracy, abstention, retrieved docs, retrieval hit, evidence recall, and MRR.
 
 FinanceBench sample can be loaded directly from HuggingFace:
 
@@ -253,7 +255,13 @@ The HuggingFace version contains 150 open-source sample examples. The full Finan
 question + provided evidence/context -> retrieval -> LLM answer -> EM/F1/retrieval hit
 ```
 
-This stage does not download or parse original PDFs. A later document-level RAG mode can use `doc_link` PDFs with Docling parsing, chunking, retrieval, and LLM answering.
+This stage does not download or parse original PDFs. FinanceBench currently runs in `--financebench_mode evidence`, meaning benchmark-native RAG:
+
+```text
+question + provided evidence/context -> retrieval -> LLM answer -> EM/F1/retrieval hit
+```
+
+A later document-level RAG mode can use `doc_link` PDFs with Docling parsing, chunking, retrieval, and LLM answering.
 
 Local FinanceBench samples are still supported:
 
@@ -268,6 +276,37 @@ python scripts/run_eval.py \
 ```
 
 For local loading, place a JSON, JSONL, or CSV sample under `data/financebench/`, or pass a specific file with `--financebench_local_path`. The parser is intentionally permissive for public samples and hand-curated subsets. Large benchmark data and generated outputs are ignored by git.
+
+Recommended benchmark smoke tests:
+
+```bash
+python scripts/run_eval.py --dataset hotpotqa --max_examples 3 --setting basic_rag --top_k 5
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 3 --setting basic_rag --top_k 5
+```
+
+Recommended small ablation benchmark:
+
+```bash
+python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting no_rag
+python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting basic_rag --top_k 5
+python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting reranker_rag --retrieve_top_n 20 --rerank_top_k 5
+python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting agentic_rag_conservative --top_k 5
+python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting agentic_rag_balanced --top_k 5
+python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting agentic_rag_aggressive --top_k 5
+
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting no_rag
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting basic_rag --top_k 5
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting reranker_rag --retrieve_top_n 20 --rerank_top_k 5
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting agentic_rag_conservative --top_k 5
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting agentic_rag_balanced --top_k 5
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting agentic_rag_aggressive --top_k 5
+```
+
+Summarize runs:
+
+```bash
+python scripts/summarize_results.py --input_dir outputs/eval_results
+```
 
 Convert the local RAG-Challenge-2 test set to the same eval JSONL schema:
 
