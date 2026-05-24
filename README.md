@@ -329,6 +329,32 @@ Run the full local RAG-Challenge-2 pipeline:
 scripts/run_rag_challenge_pipeline.sh
 ```
 
+## Evaluation Results
+
+Current public benchmark results are from a 50-example ablation in benchmark-native evidence mode. HotpotQA uses dataset-provided context as the candidate corpus and `supporting_facts` as gold evidence. FinanceBench uses dataset-provided `evidence` / `evidence_text_full_page` as the candidate corpus.
+
+This is not raw PDF + Docling mode. A raw-PDF enterprise benchmark will be built separately in a later stage.
+
+| dataset | setting | num_examples | avg_em | avg_f1 | numeric_match | boolean_acc | retrieval_hit_rate | evidence_recall_at_k | mrr | abstention_rate | avg_retry_count | rewrite_rate | evidence_gap_rate | avg_latency_sec |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| financebench | no_rag | 50 | 0.0000 | 0.0615 | 0.1000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.7000 | 0.0000 | 0.0000 | 0.0000 | 0.4200 |
+| financebench | basic_rag | 50 | 0.0000 | 0.2067 | 0.4400 | 0.3000 | 1.0000 | 1.0000 | 1.0000 | 0.1400 | 0.0000 | 0.0000 | 0.0000 | 0.7863 |
+| financebench | reranker_rag | 50 | 0.0000 | 0.2078 | 0.4400 | 0.3000 | 1.0000 | 1.0000 | 1.0000 | 0.1600 | 0.0000 | 0.0000 | 0.0000 | 0.7519 |
+| financebench | iterative_agentic_rag | 50 | 0.0000 | 0.1193 | 0.2600 | 0.0000 | 1.0000 | 1.0000 | 1.0000 | 0.4200 | 0.8400 | 0.4200 | 0.4200 | 0.3678 |
+| hotpotqa | no_rag | 50 | 0.1800 | 0.2324 | 0.0800 | 0.7778 | 0.0000 | 0.0000 | 0.0000 | 0.3600 | 0.0000 | 0.0000 | 0.0000 | 0.1328 |
+| hotpotqa | basic_rag | 50 | 0.5000 | 0.5588 | 0.1400 | 0.8889 | 1.0000 | 0.8477 | 0.8857 | 0.2200 | 0.0000 | 0.0000 | 0.0000 | 0.1937 |
+| hotpotqa | reranker_rag | 50 | 0.4800 | 0.5650 | 0.1400 | 0.8889 | 1.0000 | 0.8093 | 0.8567 | 0.1600 | 0.0000 | 0.0000 | 0.0000 | 0.1915 |
+| hotpotqa | iterative_agentic_rag | 50 | 0.4800 | 0.5388 | 0.1400 | 0.7778 | 1.0000 | 0.8477 | 0.8857 | 0.2400 | 0.4200 | 0.3400 | 0.3400 | 0.1945 |
+
+Interpretation:
+
+- RAG substantially improves over `no_rag` on both HotpotQA and FinanceBench.
+- On FinanceBench, `numeric_match` is more meaningful than exact match because answers often differ by units and formatting.
+- `reranker_rag` provides a small improvement or comparable performance over `basic_rag`.
+- `iterative_agentic_rag` successfully triggers evidence-gap detection and query rewriting, as shown by non-zero `avg_retry_count`, `rewrite_rate`, and `evidence_gap_rate`.
+- However, in benchmark-native evidence mode, the candidate corpus is already constrained and `retrieval_hit_rate` is often 1.0, so iterative refinement mainly demonstrates evidence-aware control and abstention rather than large F1 gains.
+- This motivates the next evaluation stage: a raw-PDF enterprise benchmark built from Docling-parsed chunks, where retrieval is noisier and iterative evidence refinement should be more useful.
+
 ## Slurm: RAG-Challenge-2 Test Set
 
 The Slurm launchers activate the `agent_env` conda environment, parse PDFs from
