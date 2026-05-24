@@ -1,425 +1,210 @@
-# Agent-driven Enterprise RAG System (Agentic RAG)
+# Agentic Enterprise RAG
 
-An experimental Enterprise RAG system that compares three retrieval-augmented question-answering patterns:
+This project studies when iterative evidence refinement helps enterprise RAG systems under noisy retrieval conditions.
 
-- **Naive RAG**: retrieve chunks, then answer.
-- **RAG + Reranker**: retrieve a wider set, rerank evidence, then answer.
-- **Agentic RAG**: plan, retrieve, rerank, evaluate evidence quality, optionally rewrite the query, then answer or refuse.
+It compares four QA settings:
 
-The project is built to be runnable in local development environments. It prefers production-style components such as sentence-transformers embeddings, FAISS, and cross-encoder reranking, but includes lightweight fallback backends so the full pipeline can still run without model downloads or API keys.
+| setting | behavior |
+| --- | --- |
+| `no_rag` | answer directly without retrieval |
+| `basic_rag` | retrieve top-k chunks once, then answer |
+| `reranker_rag` | retrieve a wider candidate set, rerank, then answer |
+| `iterative_agentic_rag` | retrieve, detect evidence gaps, rewrite/retry when needed, then answer or abstain |
 
-## Motivation
+The core question is not whether retrieval helps in general. It does. The project focuses on the harder enterprise setting: noisy PDF chunks, ambiguous financial metrics, aliases, wrong-year distractors, multi-hop evidence, and unsupported questions where the system should refuse.
 
-Naive RAG is easy to build, but it often answers from noisy retrieval results. A fixed reranking pipeline can improve relevance, but it still lacks a decision layer: it will usually answer even when evidence is weak or out of scope.
-
-This project adds an evidence-aware Agent workflow. The agent makes explicit decisions about whether evidence is strong enough to answer, whether a query should be rewritten and retried, or whether the system should refuse because the available documents do not support an answer.
-
-## System Overview
-
-```text
-User Query
-  ↓
-Planner
-  ↓
-Retrieval Tool
-  ↓
-Rerank Tool
-  ↓
-Evidence Gap Detector
-   ├── answer-ready evidence
-   └── follow-up retrieval for missing fields
-  ↓
-Evidence-aware Policy
-   ├── answer
-   ├── rewrite query and retry
-   └── refuse
-  ↓
-Answer Tool / Refusal Tool
-```
-
-Core capabilities:
-
-- LangChain-compatible tool wrappers with direct Python-callable interfaces.
-- FAISS vector indexing when available, with a NumPy cosine fallback.
-- Sentence-transformers embeddings when available, with a deterministic hashing fallback.
-- Cross-encoder reranking when available, with a deterministic lexical fallback.
-- Query rewriting for weak evidence retries.
-- Iterative evidence-seeking follow-up retrieval when top evidence is incomplete.
-- Metadata lookup for document-to-company identity when source files use SHA-style names.
-- Grounded refusal when the document set does not support an answer.
-- Trace logging for agent decisions, retrieval results, reranking scores, policy statistics, and final output.
-
-## Repository Structure
+## System
 
 ```text
-agentic-enterprise-rag/
-├── configs/             # Runtime config and agent policy presets
-├── data/
-│   ├── raw_docs/        # Source documents
-│   ├── processed/       # Chunks and vector index artifacts
-│   └── eval/            # Example evaluation JSONL
-├── docs/                # Architecture notes and future evaluation plan
-├── results/             # Traces and evaluation outputs
-├── scripts/             # CLI entrypoints
-└── src/
-    ├── agent/           # Planner, evidence policy, executor, trace logger
-    ├── eval/            # HotpotQA/FinanceBench benchmark loaders and metrics
-    ├── evaluation/      # Dataset loader, metrics, evaluator
-    ├── generation/      # LLM client and answer generation
-    ├── indexing/        # Embeddings and vector index persistence
-    ├── ingest/          # PDF/text parsing and chunking
-    ├── retrieval/       # Retriever and reranker
-    ├── schemas/         # Pydantic data contracts
-    └── tools/           # Retrieval, rerank, rewrite, answer, refusal tools
+Question
+  -> vector retrieval
+  -> optional reranking
+  -> evidence gap detection
+  -> query rewrite + retry when evidence is weak
+  -> grounded answer or abstention
 ```
 
-## Local LLM Serving with vLLM
+Main components:
 
-The default real-LLM path uses a local vLLM OpenAI-compatible server for Qwen3-8B. The Agent process does not load model weights with `transformers.from_pretrained()`; it calls the API at `http://localhost:8000/v1`.
+- PDF parsing and chunking with Docling.
+- FAISS vector retrieval over persisted chunk indexes.
+- Cross-encoder reranking with a lexical fallback.
+- Evidence-aware agent loop with query rewriting, retry tracking, and refusal behavior.
+- Benchmark runners for public datasets and a local enterprise PDF benchmark.
 
-Install project dependencies:
+## Repository
 
-```bash
-pip install -r requirements.txt
+```text
+configs/       runtime config
+data/          raw PDFs, processed chunks, vector indexes, eval JSONL
+outputs/       benchmark outputs and summaries
+scripts/       CLI entrypoints
+src/
+  agent/       planning, policy, evidence-gap logic
+  eval/        benchmark loaders, metrics, agentic benchmark runner
+  ingest/      Docling parsing and chunking
+  indexing/    embeddings and vector-index persistence
+  retrieval/   retriever and reranker
+  tools/       retrieval, rerank, rewrite, answer, refusal tools
 ```
 
-Install vLLM in the serving environment. It is optional for clients, but required on the machine that hosts the local model:
+## Commands
 
-```bash
-pip install "vllm>=0.5"
-```
-
-Start the local Qwen3-8B API:
+Start vLLM API:
 
 ```bash
 bash scripts/serve_qwen3_8b_vllm.sh
 ```
 
-The script serves `/data/common/LLMs/Qwen3-8B` as model name `qwen3-8b` on port `8000`.
-
-Test the API:
+Run public benchmark evaluation:
 
 ```bash
-python scripts/test_llm_api.py
+python scripts/run_eval.py --dataset hotpotqa --setting basic_rag --max_examples 50
+python scripts/run_eval.py --dataset financebench --setting iterative_agentic_rag --max_examples 50
 ```
 
-Equivalent direct API check:
-
-```bash
-curl http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer EMPTY" \
-  -d '{
-    "model": "qwen3-8b",
-    "messages": [{"role": "user", "content": "Who wrote the novel Pride and Prejudice?"}],
-    "temperature": 0,
-    "max_tokens": 64
-  }'
-```
-
-Default Agent LLM config:
-
-```yaml
-llm:
-  provider: openai_compatible
-  base_url: http://localhost:8000/v1
-  api_key: EMPTY
-  model_name: qwen3-8b
-  temperature: 0.0
-  max_tokens: 512
-  disable_thinking: true
-  strip_thinking: true
-```
-
-Qwen3 may output thinking traces by default. This project disables thinking via `chat_template_kwargs.enable_thinking=false` when supported by vLLM, and also strips `<think>...</think>` blocks as a safety fallback so benchmark metrics are computed on the final answer only. Per-example benchmark JSONL stores cleaned `prediction` and raw `raw_prediction` for debugging.
-
-Use `--mock` only when you explicitly want the deterministic smoke-test backend.
-
-## Quick Start
-
-Install dependencies. The project can run in fallback mode even if optional FAISS or sentence-transformers downloads are unavailable.
-
-```bash
-pip install -r requirements.txt
-```
-
-Parse sample documents:
-
-```bash
-python scripts/parse_docs.py \
-  --input_dir data/raw_docs \
-  --output data/processed/chunks.jsonl \
-  --config configs/default.yaml
-```
-
-Build a vector index:
-
-```bash
-python scripts/build_index.py \
-  --chunks data/processed/chunks.jsonl \
-  --index_dir data/processed/vector_index \
-  --config configs/default.yaml
-```
-
-Run Naive RAG:
-
-```bash
-python scripts/run_naive_rag.py \
-  --question "How many vacation days do new employees accrue?" \
-  --top_k 5 \
-  --index_dir data/processed/vector_index \
-  --config configs/default.yaml \
-  --mock
-```
-
-Run RAG + Reranker:
-
-```bash
-python scripts/run_rerank_rag.py \
-  --question "How many vacation days do new employees accrue?" \
-  --retrieve_k 10 \
-  --rerank_top_n 5 \
-  --index_dir data/processed/vector_index \
-  --config configs/default.yaml \
-  --mock
-```
-
-Run Agentic RAG:
-
-```bash
-python scripts/run_agentic_rag.py \
-  --question "How many vacation days do new employees accrue?" \
-  --index_dir data/processed/vector_index \
-  --config configs/default.yaml \
-  --agent_policy balanced \
-  --mock \
-  --save_trace results/agent_trace_sample.json
-```
-
-Run evaluation:
+Run enterprise PDF benchmark evaluation:
 
 ```bash
 python scripts/run_eval.py \
-  --eval_file data/eval/eval_questions.example.jsonl \
-  --methods naive,rerank,agentic \
-  --agent_policies conservative,balanced,aggressive \
-  --index_dir data/processed/vector_index \
-  --config configs/default.yaml \
-  --mock \
-  --output_dir results/eval_policy_sweep
-```
-
-Run HotpotQA no-RAG benchmark evaluation:
-
-```bash
-python scripts/run_eval.py \
-  --dataset hotpotqa \
+  --dataset rag_challenge_test_set \
+  --rag_challenge_path data/eval/rag_challenge_test_set.jsonl \
+  --rag_challenge_index_dir data/processed/rag_challenge_test_index \
+  --setting iterative_agentic_rag \
   --max_examples 100 \
-  --setting no_rag
+  --max_iterations 2
 ```
 
-Run HotpotQA RAG benchmark evaluation:
+Summarize results:
 
 ```bash
-python scripts/run_eval.py \
-  --dataset hotpotqa \
-  --max_examples 100 \
-  --setting basic_rag \
-  --top_k 5
+python scripts/summarize_results.py --input_dir outputs/eval_results_rag_challenge
 ```
 
-`--setting rag` is kept as a backward-compatible alias for `basic_rag`.
+## Public Benchmark Evaluation
 
-Run FinanceBench sample RAG evaluation from HuggingFace:
+Public benchmark runs use benchmark-native evidence mode:
 
-```bash
-python scripts/run_eval.py \
-  --dataset financebench \
-  --financebench_source hf \
-  --max_examples 50 \
-  --setting basic_rag \
-  --top_k 5
-```
+- HotpotQA: dataset-provided context is used as the retrieval corpus.
+- FinanceBench: dataset-provided evidence is used as the retrieval corpus.
 
-Benchmark outputs are written to `outputs/eval_results/{dataset}_{setting}_{timestamp}.jsonl` and a matching summary JSON. Each row includes `prediction`, `raw_prediction`, categories, EM/F1, numeric match, boolean accuracy, abstention, retrieved docs, retrieval hit, evidence recall, MRR, and optional `agent_trace` for iterative runs.
+This gives a constrained retrieval space. These runs are useful for standardized comparison, RAG vs. `no_rag`, reranking ablation, and evidence-aware abstention analysis. They are not raw-PDF retrieval experiments.
 
-Main benchmark settings:
+| dataset | setting | n | EM | F1 | numeric | boolean | hit | recall | MRR | abstain | retry | rewrite | gap |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| financebench | no_rag | 50 | 0.000 | 0.061 | 0.100 | 0.000 | 0.000 | 0.000 | 0.000 | 0.700 | 0.000 | 0.000 | 0.000 |
+| financebench | basic_rag | 50 | 0.000 | 0.207 | 0.440 | 0.300 | 1.000 | 1.000 | 1.000 | 0.140 | 0.000 | 0.000 | 0.000 |
+| financebench | reranker_rag | 50 | 0.000 | 0.208 | 0.440 | 0.300 | 1.000 | 1.000 | 1.000 | 0.160 | 0.000 | 0.000 | 0.000 |
+| financebench | iterative_agentic_rag | 50 | 0.000 | 0.119 | 0.260 | 0.000 | 1.000 | 1.000 | 1.000 | 0.420 | 0.840 | 0.420 | 0.420 |
+| hotpotqa | no_rag | 50 | 0.180 | 0.232 | 0.080 | 0.778 | 0.000 | 0.000 | 0.000 | 0.360 | 0.000 | 0.000 | 0.000 |
+| hotpotqa | basic_rag | 50 | 0.500 | 0.559 | 0.140 | 0.889 | 1.000 | 0.848 | 0.886 | 0.220 | 0.000 | 0.000 | 0.000 |
+| hotpotqa | reranker_rag | 50 | 0.480 | 0.565 | 0.140 | 0.889 | 1.000 | 0.809 | 0.857 | 0.160 | 0.000 | 0.000 | 0.000 |
+| hotpotqa | iterative_agentic_rag | 50 | 0.480 | 0.539 | 0.140 | 0.778 | 1.000 | 0.848 | 0.886 | 0.240 | 0.420 | 0.340 | 0.340 |
 
-| Setting | Meaning |
-| --- | --- |
-| `no_rag` | Direct LLM answer without retrieval |
-| `basic_rag` | Single-shot retrieve top-k and answer |
-| `reranker_rag` | Retrieve top-n, rerank top-k, then answer |
-| `iterative_agentic_rag` | Retrieve, check evidence sufficiency, rewrite/retry if weak, then answer/refuse |
+Key observations:
 
-FinanceBench sample can be loaded directly from HuggingFace:
+- RAG substantially improves over `no_rag` on both datasets.
+- Reranking gives modest gains or comparable performance.
+- In benchmark-native evidence mode, retrieval is already constrained, so iterative refinement mainly demonstrates evidence-aware abstention, rewrite triggering, and retry behavior rather than dramatic retrieval gains.
 
-```bash
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting basic_rag --top_k 5
-```
+Source: `outputs/eval_results_public/summary_table.csv` and matching `*_summary.json` files.
 
-The HuggingFace version contains 150 open-source sample examples. The full FinanceBench has 10,000+ examples and requires contacting the authors. Current evaluation uses the provided `evidence` field as the document corpus for benchmark-native RAG:
+## Enterprise PDF Benchmark
+
+The local enterprise benchmark, `rag_challenge_test_set`, is built from Docling-parsed PDFs, chunked enterprise documents, and a persisted FAISS vector index:
 
 ```text
-question + provided evidence/context -> retrieval -> LLM answer -> EM/F1/retrieval hit
+data/raw_docs/rag_challenge_test_set/
+data/processed/rag_challenge_test_index/
+data/eval/rag_challenge_test_set.jsonl
 ```
 
-This stage does not download or parse original PDFs. FinanceBench currently runs in `--financebench_mode evidence`, meaning benchmark-native RAG:
+Unlike the public benchmark setup, this benchmark uses true vector retrieval over a noisy PDF chunk corpus. Gold evidence is annotated by chunk id. The benchmark includes:
+
+- alias and wording mismatch
+- wrong-year and wrong-metric distractors
+- evidence distributed across chunks/pages
+- multi-hop questions
+- OOD/refusal cases
+
+Question categories are balanced across `fact_qa`, `numerical`, `multi_hop`, `boolean`, and `ood`.
+
+| setting | n | EM | F1 | numeric | boolean | hit | recall | MRR | abstain | retry | rewrite | gap |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| no_rag | 100 | 0.000 | 0.074 | 0.020 | 0.000 | 0.000 | 0.000 | 0.000 | 0.800 | 0.000 | 0.000 | 0.000 |
+| basic_rag | 100 | 0.060 | 0.274 | 0.180 | 0.000 | 0.800 | 0.800 | 0.788 | 0.510 | 0.000 | 0.000 | 0.000 |
+| reranker_rag | 100 | 0.050 | 0.307 | 0.240 | 0.000 | 0.800 | 0.800 | 0.775 | 0.450 | 0.000 | 0.000 | 0.000 |
+| iterative_agentic_rag | 100 | 0.260 | 0.377 | 0.170 | 0.000 | 0.800 | 0.800 | 0.788 | 0.520 | 0.800 | 0.600 | 0.600 |
+
+In the noisy PDF setting, `iterative_agentic_rag` improves substantially over single-shot retrieval. The agent actively detects insufficient evidence, rewrites queries, and retries retrieval before answering. This is reflected in non-zero `avg_retry_count`, `rewrite_rate`, and `evidence_gap_rate`.
+
+Source: `outputs/eval_results_rag_challenge/summary_table.csv` and matching `*_summary.json` files.
+
+## Case Studies
+
+These examples are selected from `outputs/eval_results_rag_challenge/rag_challenge_test_set_iterative_agentic_rag_20260524_105317.jsonl`.
+
+### A. Multi-hop Retrieval Success
+
+Question: Which acquisition expanded CrossFirst in 2022, and what adjusted diluted EPS and adjusted ROE did CrossFirst report for that year?
+
+Why difficult: the answer requires linking acquisition evidence with separate performance metrics.
+
+Rewrite example:
 
 ```text
-question + provided evidence/context -> retrieval or iterative_agentic_rag -> LLM answer/refusal -> metrics
+Which acquisition expanded CrossFirst in 2022 ... e2b19d2cc2ccab2fd9022326b56b38fb0e772e73.pdf multi_hop hard
 ```
 
-A later document-level RAG mode can use `doc_link` PDFs with Docling parsing, chunking, retrieval, and LLM answering.
+Evidence snippets:
 
-Local FinanceBench samples are still supported:
+- `bdabffc7...`, p.2: CrossFirst acquired Farmers & Stockmens Bank (`Central`) via merger.
+- `be6c031...`, p.2: adjusted diluted EPS was `$1.37`; adjusted ROE improved to `11.11%`.
 
-```bash
-python scripts/run_eval.py \
-  --dataset financebench \
-  --financebench_source local \
-  --financebench_local_path data/financebench/sample.jsonl \
-  --max_examples 50 \
-  --setting basic_rag \
-  --top_k 5
-```
+Why iterative helped: the initial evidence was incomplete, the agent marked an evidence gap, added document/category hints, and retrieved additional supporting chunks before answering.
 
-For local loading, place a JSON, JSONL, or CSV sample under `data/financebench/`, or pass a specific file with `--financebench_local_path`. The parser is intentionally permissive for public samples and hand-curated subsets. Large benchmark data and generated outputs are ignored by git.
+### B. Reranker Failed, Iterative Succeeded
 
-Recommended benchmark smoke tests:
+Question: Which product-service categories does Yellow Pages say the CEO reviews revenues by?
 
-```bash
-python scripts/run_eval.py --dataset hotpotqa --max_examples 3 --setting basic_rag --top_k 5
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 3 --setting basic_rag --top_k 5
-```
+Gold answer: Print and Digital.
 
-Recommended small ablation benchmark:
+Reranker result: `Not sure.`
 
-```bash
-python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting no_rag
-python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting basic_rag --top_k 5
-python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting reranker_rag --retrieve_top_n 20 --rerank_top_k 5
-python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting iterative_agentic_rag --top_k 5 --max_iterations 2
+Iterative result: `Print and Digital.`
 
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting no_rag
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting basic_rag --top_k 5
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting reranker_rag --retrieve_top_n 20 --rerank_top_k 5
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting iterative_agentic_rag --top_k 5 --max_iterations 2
-```
-
-Summarize runs:
-
-```bash
-python scripts/summarize_results.py --input_dir outputs/eval_results
-```
-
-Convert the local RAG-Challenge-2 test set to the same eval JSONL schema:
-
-```bash
-python scripts/convert_rag_challenge_testset.py \
-  --questions data/external/rag_challenge_2/test_set/questions.json \
-  --answers data/external/rag_challenge_2/test_set/answers_max_nst_o3m.json \
-  --subset data/external/rag_challenge_2/test_set/subset.csv \
-  --output data/eval/rag_challenge_test_set.jsonl
-```
-
-Run the full local RAG-Challenge-2 pipeline:
-
-```bash
-scripts/run_rag_challenge_pipeline.sh
-```
-
-## Evaluation Results
-
-Current public benchmark results are from a 50-example ablation in benchmark-native evidence mode. HotpotQA uses dataset-provided context as the candidate corpus and `supporting_facts` as gold evidence. FinanceBench uses dataset-provided `evidence` / `evidence_text_full_page` as the candidate corpus.
-
-This is not raw PDF + Docling mode. A raw-PDF enterprise benchmark will be built separately in a later stage.
-
-| dataset | setting | num_examples | avg_em | avg_f1 | numeric_match | boolean_acc | retrieval_hit_rate | evidence_recall_at_k | mrr | abstention_rate | avg_retry_count | rewrite_rate | evidence_gap_rate | avg_latency_sec |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| financebench | no_rag | 50 | 0.0000 | 0.0615 | 0.1000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.7000 | 0.0000 | 0.0000 | 0.0000 | 0.4200 |
-| financebench | basic_rag | 50 | 0.0000 | 0.2067 | 0.4400 | 0.3000 | 1.0000 | 1.0000 | 1.0000 | 0.1400 | 0.0000 | 0.0000 | 0.0000 | 0.7863 |
-| financebench | reranker_rag | 50 | 0.0000 | 0.2078 | 0.4400 | 0.3000 | 1.0000 | 1.0000 | 1.0000 | 0.1600 | 0.0000 | 0.0000 | 0.0000 | 0.7519 |
-| financebench | iterative_agentic_rag | 50 | 0.0000 | 0.1193 | 0.2600 | 0.0000 | 1.0000 | 1.0000 | 1.0000 | 0.4200 | 0.8400 | 0.4200 | 0.4200 | 0.3678 |
-| hotpotqa | no_rag | 50 | 0.1800 | 0.2324 | 0.0800 | 0.7778 | 0.0000 | 0.0000 | 0.0000 | 0.3600 | 0.0000 | 0.0000 | 0.0000 | 0.1328 |
-| hotpotqa | basic_rag | 50 | 0.5000 | 0.5588 | 0.1400 | 0.8889 | 1.0000 | 0.8477 | 0.8857 | 0.2200 | 0.0000 | 0.0000 | 0.0000 | 0.1937 |
-| hotpotqa | reranker_rag | 50 | 0.4800 | 0.5650 | 0.1400 | 0.8889 | 1.0000 | 0.8093 | 0.8567 | 0.1600 | 0.0000 | 0.0000 | 0.0000 | 0.1915 |
-| hotpotqa | iterative_agentic_rag | 50 | 0.4800 | 0.5388 | 0.1400 | 0.7778 | 1.0000 | 0.8477 | 0.8857 | 0.2400 | 0.4200 | 0.3400 | 0.3400 | 0.1945 |
-
-Interpretation:
-
-- RAG substantially improves over `no_rag` on both HotpotQA and FinanceBench.
-- On FinanceBench, `numeric_match` is more meaningful than exact match because answers often differ by units and formatting.
-- `reranker_rag` provides a small improvement or comparable performance over `basic_rag`.
-- `iterative_agentic_rag` successfully triggers evidence-gap detection and query rewriting, as shown by non-zero `avg_retry_count`, `rewrite_rate`, and `evidence_gap_rate`.
-- However, in benchmark-native evidence mode, the candidate corpus is already constrained and `retrieval_hit_rate` is often 1.0, so iterative refinement mainly demonstrates evidence-aware control and abstention rather than large F1 gains.
-- This motivates the next evaluation stage: a raw-PDF enterprise benchmark built from Docling-parsed chunks, where retrieval is noisier and iterative evidence refinement should be more useful.
-
-## Slurm: RAG-Challenge-2 Test Set
-
-The Slurm launchers activate the `agent_env` conda environment, parse PDFs from
-`data/raw_docs/rag_challenge_test_set`, build `data/processed/rag_challenge_test_index`,
-convert the test questions, and write evaluation outputs to `results/rag_challenge_test_eval`.
-
-```bash
-chmod +x scripts/run_rag_challenge_pipeline.sh scripts/slurm/*.sbatch
-
-# GPU default: partition 4090, gpu:1, 8 CPUs, 48G, 4 hours.
-sbatch scripts/slurm/run_rag_challenge_eval.sbatch
-
-# CPU fallback: 8 CPUs, 48G, 6 hours.
-sbatch scripts/slurm/run_rag_challenge_eval_cpu.sbatch
-```
-
-Both Slurm scripts keep `--mock` enabled by default so retrieval, reranking, and
-policy behavior can be evaluated without an LLM API key. To use a real LLM:
-
-```bash
-export OPENAI_API_KEY=...
-RAG_CHALLENGE_EVAL_MOCK=0 sbatch --export=ALL scripts/slurm/run_rag_challenge_eval.sbatch
-```
-
-## Example Outputs
-
-Grounded answer:
+Rewrite example:
 
 ```text
-Question
-How many vacation days do new employees accrue?
-
-Answer
-New employees accrue 15 vacation days per calendar year, prorated from their start date. [chunk:1:60968f54]
+Which product-service categories does Yellow Pages say the CEO reviews revenues by? 9d7a72445aba6860402c3acce75af02dc045f74d.pdf fact_qa medium revenue
 ```
 
-Out-of-domain refusal:
+Evidence snippet:
+
+- `1902e614...`, p.51: the company reviews revenues by similar products and services, such as Print and Digital.
+
+Why iterative helped: the single-shot setting missed or underused the relevant revenue-category evidence. The rewrite added document and metric hints, producing a more targeted retrieval round.
+
+### C. OOD Abstention
+
+Question: What was Apple's research and development expense in fiscal 2022?
+
+Why difficult: the corpus contains a Holley R&D expense figure, which is a plausible but wrong-company distractor.
+
+Retrieved distractor:
+
+- `72cbb537...`, Holley p.37: research and development costs were `$29.1 million`.
+
+Final answer:
 
 ```text
-Question
-What is the company's policy on pet insurance?
-
-Final Decision
-refuse
-
-Answer
-I don't have enough grounded evidence to answer this question from the available documents.
+Not sure based on the provided documents.
 ```
 
-## Smoke-test Evaluation
+Why iterative helped: the agent treated the retrieved evidence as insufficient for an Apple question, retried, and ultimately refused instead of copying a wrong-company metric.
 
-The current evaluation uses a tiny synthetic enterprise-policy dataset derived from `data/raw_docs/sample_policy.md`. These metrics validate pipeline behavior; they are **not benchmark results**.
+## Interpretation
 
-The following table comes from mock mode with local fallback embeddings/reranking in this environment:
+The public benchmark results show that retrieval and reranking improve standard QA metrics when evidence is already nearby. The enterprise PDF benchmark shows the more important behavior for production RAG: under noisy retrieval, iterative evidence refinement can improve answer quality and reduce unsupported answers by explicitly deciding when retrieved chunks are not enough.
 
-| method | overall_f1 | answerable_f1 | ood_refusal_accuracy | unsupported_rate |
-| --- | ---: | ---: | ---: | ---: |
-| naive | 0.256 | 0.318 | 0.000 | 0.200 |
-| rerank | 0.263 | 0.318 | 0.000 | 0.200 |
-| agentic_conservative | 0.058 | 0.027 | 1.000 | 0.000 |
-| agentic_balanced | 0.195 | 0.199 | 1.000 | 0.000 |
-| agentic_aggressive | 0.281 | 0.318 | 0.750 | 0.050 |
-
-Interpretation:
-
-- Naive and rerank baselines answer more often, but do not refuse OOD questions.
-- Conservative and balanced agent policies protect against unsupported OOD answers, but over-refuse answerable questions.
-- The aggressive policy improves answerable coverage on this smoke test, but allows one OOD false answer.
+The project does not claim state-of-the-art benchmark performance. It focuses on evaluation methodology, benchmark construction, retrieval robustness, and evidence-aware control flow for enterprise RAG.
