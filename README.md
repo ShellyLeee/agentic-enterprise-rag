@@ -124,19 +124,19 @@ bash scripts/serve_qwen3_8b_vllm.sh
 python scripts/run_eval.py --dataset rag_challenge_test_set --setting iterative_agentic_rag --max_examples 100
 ```
 
-运行公开 benchmark：
-
-```bash
-python scripts/run_eval.py --dataset hotpotqa --setting basic_rag --max_examples 50
-python scripts/run_eval.py --dataset financebench --setting reranker_rag --max_examples 50
-```
-
 可支持问题子集 `multi_hop`、`ood` 以及 `requires_rewrite` 的分类评估场景：
 
 ```bash
 python scripts/run_subset_eval.py --subset_type multi_hop
 python scripts/run_subset_eval.py --subset_type ood
 python scripts/run_subset_eval.py --subset_type requires_rewrite
+```
+
+运行 `hotpot_qa` 和 `financebench` 的 公开benchmark：
+
+```bash
+python scripts/run_eval.py --dataset hotpotqa --setting basic_rag --max_examples 50
+python scripts/run_eval.py --dataset financebench --setting reranker_rag --max_examples 50
 ```
 
 汇总结果：
