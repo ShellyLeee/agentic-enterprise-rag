@@ -1,0 +1,7 @@
+{
+  "backend": "faiss",
+  "embedding_model": "BAAI/bge-small-en-v1.5",
+  "embedding_backend": "sentence-transformers",
+  "chunk_count": 4067,
+  "dimension": 384
+}
