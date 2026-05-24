@@ -21,6 +21,9 @@ FIELDS = [
     "evidence_recall_at_k",
     "mrr",
     "abstention_rate",
+    "avg_retry_count",
+    "rewrite_rate",
+    "evidence_gap_rate",
     "avg_latency_sec",
 ]
 

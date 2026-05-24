@@ -23,20 +23,10 @@ def system_prompt_for_setting(setting: str, example: QAExample, dataset_name: st
             "Answer using only the provided context. Do not use unsupported facts. "
             "If the context is insufficient, say: Not sure. Keep the final answer concise."
         )
-    elif setting == "agentic_rag_conservative":
+    elif setting == "iterative_agentic_rag":
         parts.append(
-            "Use the context only if it strongly supports the answer. "
-            "If evidence is weak, incomplete, or ambiguous, answer exactly: Not sure based on the provided context."
-        )
-    elif setting == "agentic_rag_balanced":
-        parts.append(
-            "Answer when the context is reasonably relevant and grounded. "
-            "If the answer cannot be determined from the context, say: Not sure based on the provided context."
-        )
-    elif setting == "agentic_rag_aggressive":
-        parts.append(
-            "Synthesize across retrieved context and answer unless the context clearly cannot support the question. "
-            "Stay concise and do not invent unsupported details."
+            "Answer using the refined evidence context. If the refined evidence still does not support the answer, "
+            "say: Not sure based on the provided context. Stay concise and grounded."
         )
 
     if dataset == "financebench":

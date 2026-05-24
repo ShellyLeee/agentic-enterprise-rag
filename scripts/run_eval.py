@@ -36,6 +36,7 @@ from src.eval import (
     numeric_match_score,
     retrieval_hit_at_k,
 )
+from src.eval.benchmark_agentic_runner import BenchmarkAgenticRunner
 from src.eval.categories import categorize_example
 from src.evaluation import EvaluatorConfig, ThreeSystemEvaluator
 from src.llm import LLMClient, LLMGeneration
@@ -50,10 +51,22 @@ BENCHMARK_SETTINGS = (
     "rag",
     "basic_rag",
     "reranker_rag",
+    "iterative_agentic_rag",
     "agentic_rag_conservative",
     "agentic_rag_balanced",
     "agentic_rag_aggressive",
+    "policy_rag_conservative",
+    "policy_rag_balanced",
+    "policy_rag_aggressive",
 )
+DEPRECATED_POLICY_SETTINGS = {
+    "agentic_rag_conservative",
+    "agentic_rag_balanced",
+    "agentic_rag_aggressive",
+    "policy_rag_conservative",
+    "policy_rag_balanced",
+    "policy_rag_aggressive",
+}
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -75,6 +88,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rerank_top_k", type=int, default=5, help="Final reranked context size.")
     parser.add_argument("--evidence_threshold", type=float, help="Minimum retrieval score for agentic abstention policy.")
     parser.add_argument("--numeric_tolerance", type=float, default=0.02, help="Relative tolerance for numeric match.")
+    parser.add_argument("--max_iterations", type=int, default=2, help="Maximum iterative_agentic_rag rewrite/retrieval retries.")
     parser.add_argument("--split", default="validation", help="HotpotQA split.")
     parser.add_argument(
         "--financebench_source",
@@ -186,9 +200,30 @@ def _run_one_benchmark_example(
     """Run one benchmark example and return a JSON-serializable row."""
     started = perf_counter()
     categories = categorize_example(example, dataset_name)
-    retrieved_docs = _retrieve_for_setting(example, setting, top_k, args)
-    weak_evidence = _has_weak_evidence(retrieved_docs, setting, args)
-    generation = _generate_prediction(client, example, dataset_name, setting, retrieved_docs, weak_evidence)
+    agent_trace: dict[str, Any] | None = None
+    if setting == "iterative_agentic_rag":
+        agent_result = BenchmarkAgenticRunner(
+            llm_client=client,
+            top_k=top_k,
+            retrieve_top_n=args.retrieve_top_n,
+            max_iterations=args.max_iterations,
+            evidence_threshold=args.evidence_threshold if args.evidence_threshold is not None else 0.15,
+            numeric_tolerance=args.numeric_tolerance,
+            dataset_name=dataset_name,
+        ).run(example)
+        retrieved_docs = agent_result["retrieved_docs"]
+        generation = LLMGeneration(
+            prediction=agent_result["prediction"],
+            raw_prediction=agent_result["raw_prediction"],
+            model=client.model_name,
+            mode="iterative_agentic_rag",
+        )
+        agent_trace = agent_result["agent_trace"]
+        weak_evidence = bool(agent_trace.get("weak_evidence"))
+    else:
+        retrieved_docs = _retrieve_for_setting(example, setting, top_k, args)
+        weak_evidence = False
+        generation = _generate_prediction(client, example, dataset_name, setting, retrieved_docs)
     prediction = generation.prediction
     latency = perf_counter() - started
     boolean_acc = boolean_accuracy_score(prediction, example.answers)
@@ -212,6 +247,7 @@ def _run_one_benchmark_example(
         "evidence_recall_at_k": evidence_recall,
         "mrr": reciprocal_rank,
         "weak_evidence": weak_evidence,
+        "agent_trace": agent_trace,
         "latency_sec": round(latency, 4),
         "metadata": example.metadata or {},
     }
@@ -236,39 +272,14 @@ def _retrieve_for_setting(
     return retriever.retrieve(example.question, top_k=top_k)
 
 
-def _has_weak_evidence(
-    retrieved_docs: list[dict[str, Any]],
-    setting: str,
-    args: argparse.Namespace,
-) -> bool:
-    """Return true when agentic policies should abstain before calling the LLM."""
-    if not setting.startswith("agentic_rag"):
-        return False
-    if not retrieved_docs:
-        return True
-    threshold = args.evidence_threshold
-    if threshold is None:
-        threshold = {
-            "agentic_rag_conservative": 0.15,
-            "agentic_rag_balanced": 0.05,
-            "agentic_rag_aggressive": 0.0,
-        }.get(setting, 0.05)
-    best_score = max(float(doc.get("score", doc.get("retrieval_score", 0.0)) or 0.0) for doc in retrieved_docs)
-    return best_score < threshold
-
-
 def _generate_prediction(
     client: LLMClient,
     example: QAExample,
     dataset_name: str,
     setting: str,
     retrieved_docs: list[dict[str, Any]],
-    weak_evidence: bool,
 ) -> LLMGeneration:
     """Generate an answer using optional retrieved context."""
-    if weak_evidence and setting == "agentic_rag_conservative":
-        answer = "Not sure based on the provided context."
-        return LLMGeneration(prediction=answer, raw_prediction=answer, model=client.model_name, mode="policy-abstain")
     context = _format_context(retrieved_docs)
     prompt = user_prompt(example.question, context, setting)
     system_prompt = system_prompt_for_setting(setting, example, dataset_name)
@@ -339,6 +350,10 @@ def _print_summary(summary: dict[str, Any], result_path: Path, summary_path: Pat
         "mrr",
         "abstention_rate",
         "avg_latency_sec",
+        "avg_retry_count",
+        "rewrite_rate",
+        "evidence_gap_rate",
+        "final_evidence_count_avg",
     ):
         value = summary[key]
         formatted = f"{value:.4f}" if isinstance(value, float) else str(value)
@@ -383,6 +398,10 @@ def _aggregate_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "mrr": _mean([row["mrr"] for row in rows]),
         "abstention_rate": _mean([1.0 if row["abstained"] else 0.0 for row in rows]),
         "avg_latency_sec": _mean([row["latency_sec"] for row in rows]),
+        "avg_retry_count": _mean([_trace_number(row, "retry_count") for row in rows]),
+        "rewrite_rate": _mean([1.0 if _trace_list(row, "rewritten_queries") else 0.0 for row in rows]),
+        "evidence_gap_rate": _mean([1.0 if _trace_bool(row, "evidence_gap_detected") else 0.0 for row in rows]),
+        "final_evidence_count_avg": _mean([_trace_number(row, "final_evidence_count") for row in rows]),
     }
 
 
@@ -397,7 +416,33 @@ def _summarize_by_category(rows: list[dict[str, Any]]) -> dict[str, dict[str, An
 
 def _normalize_setting(setting: str) -> str:
     """Map backward-compatible setting aliases to canonical names."""
-    return "basic_rag" if setting == "rag" else setting
+    if setting == "rag":
+        return "basic_rag"
+    if setting in DEPRECATED_POLICY_SETTINGS:
+        LOGGER.warning(
+            "This policy-level setting is deprecated. Please use iterative_agentic_rag for the full agent loop evaluation."
+        )
+        return "iterative_agentic_rag"
+    return setting
+
+
+def _trace_number(row: dict[str, Any], key: str) -> float:
+    """Read numeric value from optional agent trace."""
+    trace = row.get("agent_trace") or {}
+    return float(trace.get(key, 0) or 0)
+
+
+def _trace_bool(row: dict[str, Any], key: str) -> bool:
+    """Read boolean value from optional agent trace."""
+    trace = row.get("agent_trace") or {}
+    return bool(trace.get(key, False))
+
+
+def _trace_list(row: dict[str, Any], key: str) -> list[Any]:
+    """Read list value from optional agent trace."""
+    trace = row.get("agent_trace") or {}
+    value = trace.get(key, [])
+    return value if isinstance(value, list) else []
 
 
 def _run_legacy_eval(config: dict[str, Any], args: argparse.Namespace) -> None:

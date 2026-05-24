@@ -224,7 +224,7 @@ Run HotpotQA RAG benchmark evaluation:
 python scripts/run_eval.py \
   --dataset hotpotqa \
   --max_examples 100 \
-  --setting rag \
+  --setting basic_rag \
   --top_k 5
 ```
 
@@ -237,16 +237,25 @@ python scripts/run_eval.py \
   --dataset financebench \
   --financebench_source hf \
   --max_examples 50 \
-  --setting rag \
+  --setting basic_rag \
   --top_k 5
 ```
 
-Benchmark outputs are written to `outputs/eval_results/{dataset}_{setting}_{timestamp}.jsonl` and a matching summary JSON. Each row includes `prediction`, `raw_prediction`, categories, EM/F1, numeric match, boolean accuracy, abstention, retrieved docs, retrieval hit, evidence recall, and MRR.
+Benchmark outputs are written to `outputs/eval_results/{dataset}_{setting}_{timestamp}.jsonl` and a matching summary JSON. Each row includes `prediction`, `raw_prediction`, categories, EM/F1, numeric match, boolean accuracy, abstention, retrieved docs, retrieval hit, evidence recall, MRR, and optional `agent_trace` for iterative runs.
+
+Main benchmark settings:
+
+| Setting | Meaning |
+| --- | --- |
+| `no_rag` | Direct LLM answer without retrieval |
+| `basic_rag` | Single-shot retrieve top-k and answer |
+| `reranker_rag` | Retrieve top-n, rerank top-k, then answer |
+| `iterative_agentic_rag` | Retrieve, check evidence sufficiency, rewrite/retry if weak, then answer/refuse |
 
 FinanceBench sample can be loaded directly from HuggingFace:
 
 ```bash
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting rag --top_k 5
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting basic_rag --top_k 5
 ```
 
 The HuggingFace version contains 150 open-source sample examples. The full FinanceBench has 10,000+ examples and requires contacting the authors. Current evaluation uses the provided `evidence` field as the document corpus for benchmark-native RAG:
@@ -258,7 +267,7 @@ question + provided evidence/context -> retrieval -> LLM answer -> EM/F1/retriev
 This stage does not download or parse original PDFs. FinanceBench currently runs in `--financebench_mode evidence`, meaning benchmark-native RAG:
 
 ```text
-question + provided evidence/context -> retrieval -> LLM answer -> EM/F1/retrieval hit
+question + provided evidence/context -> retrieval or iterative_agentic_rag -> LLM answer/refusal -> metrics
 ```
 
 A later document-level RAG mode can use `doc_link` PDFs with Docling parsing, chunking, retrieval, and LLM answering.
@@ -271,7 +280,7 @@ python scripts/run_eval.py \
   --financebench_source local \
   --financebench_local_path data/financebench/sample.jsonl \
   --max_examples 50 \
-  --setting rag \
+  --setting basic_rag \
   --top_k 5
 ```
 
@@ -290,16 +299,12 @@ Recommended small ablation benchmark:
 python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting no_rag
 python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting basic_rag --top_k 5
 python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting reranker_rag --retrieve_top_n 20 --rerank_top_k 5
-python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting agentic_rag_conservative --top_k 5
-python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting agentic_rag_balanced --top_k 5
-python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting agentic_rag_aggressive --top_k 5
+python scripts/run_eval.py --dataset hotpotqa --max_examples 50 --setting iterative_agentic_rag --top_k 5 --max_iterations 2
 
 python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting no_rag
 python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting basic_rag --top_k 5
 python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting reranker_rag --retrieve_top_n 20 --rerank_top_k 5
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting agentic_rag_conservative --top_k 5
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting agentic_rag_balanced --top_k 5
-python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting agentic_rag_aggressive --top_k 5
+python scripts/run_eval.py --dataset financebench --financebench_source hf --max_examples 50 --setting iterative_agentic_rag --top_k 5 --max_iterations 2
 ```
 
 Summarize runs:
