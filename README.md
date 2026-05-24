@@ -12,12 +12,22 @@
 
 整体流程包括：
 
-- retrieve and rerank candidate evidence
-- evaluate evidence sufficiency
-- detect missing relations
-- rewrite queries and run follow-up retrieval
-- merge evidence across iterations
-- answer or abstain
+```text
+Question
+  -> vector retrieval
+  -> optional reranking
+  -> evidence gap detection
+  -> query rewrite + retry when evidence is weak
+  -> grounded answer or abstention
+```
+
+主要组件包括：
+
+- 使用 Docling 完成 PDF 解析与切分。
+- 基于持久化 chunk index 的 FAISS 向量检索。
+- 使用 cross-encoder reranking，并提供 lexical fallback。
+- Evidence-aware agent loop，支持 query rewriting、retry tracking 和 refusal behavior。
+- 面向 public datasets 和本地 enterprise PDF benchmark 的 benchmark runners。
 
 ## Eval
 
